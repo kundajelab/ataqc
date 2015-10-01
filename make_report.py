@@ -60,6 +60,7 @@ def fragment_length_plot(data_file, peaks=None):
 
     return plot_img.getvalue()
 
+
 html_template = Template("""
 {% macro inline_img(base64_img, img_type='png') -%}
     <img src="data:image/{{ img_type }};base64,{{ base64_img }}">
