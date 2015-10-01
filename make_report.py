@@ -34,12 +34,18 @@ def preseq_plot(data_file):
     return plot_img.getvalue()
 
 
-def fragment_length_plot(data_file):
+def read_picard_histogram(data_file):
     with open(data_file) as fp:
         for line in fp:
             if line.startswith('## HISTOGRAM'):
                 break
         data = np.loadtxt(fp, skiprows=1)
+
+    return data
+
+
+def fragment_length_plot(data_file, peaks=None):
+    data = read_picard_histogram(data_file)
 
     fig = plt.figure()
     plt.bar(data[:, 0], data[:, 1])
