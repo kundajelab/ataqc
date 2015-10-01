@@ -7,6 +7,7 @@ import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 import numpy as np
+from scipy.signal import find_peaks_cwt
 
 from jinja2 import Template
 
@@ -104,6 +105,37 @@ class QCHasElementInRange(QCCheck):
         return ('OK' if qc_pass else
                 'Cannot find element in range [{}, {}]'.format(
                     self.lower, self.upper))
+
+
+def fragment_length_qc(data):
+    results = []
+
+    NFR_UPPER_LIMIT = 150
+    MONO_NUC_LOWER_LIMIT = 150
+    MONO_NUC_UPPER_LIMIT = 300
+
+    # % of NFR vs res
+    percent_nfr = data[:NFR_UPPER_LIMIT].sum() / data.sum()
+    results.append(
+        QCGreaterThanEqualCheck('Fraction of reads in NFR', 0.4)(percent_nfr))
+
+    # % of NFR vs mononucleosome
+    percent_nfr_vs_mono_nuc = (
+        data[:NFR_UPPER_LIMIT].sum() /
+        data[MONO_NUC_LOWER_LIMIT:MONO_NUC_UPPER_LIMIT + 1].sum())
+    results.append(
+        QCGreaterThanEqualCheck('NFR / mono-nuc reads', 2.5)(
+            percent_nfr_vs_mono_nuc))
+
+    # peak locations
+    peaks = find_peaks_cwt(data[:, 1], np.array([25]))
+    nuc_range_metrics = [('Presence of NFR peak', 20, 90),
+                         ('Presence of Mono-Nuc peak', 120, 250),
+                         ('Presence of Di-Nuc peak', 300, 500)]
+    for range_metric in nuc_range_metrics:
+        results.append(QCHasElementInRange(*range_metric)(peaks))
+
+    return results
 
 
 def fragment_length_plot(data_file, peaks=None):
