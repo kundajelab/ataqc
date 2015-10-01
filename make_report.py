@@ -51,6 +51,10 @@ def fragment_length_plot(data_file, peaks=None):
     plt.bar(data[:, 0], data[:, 1])
     plt.xlim((0, 1000))
 
+    if peaks:
+        peak_vals = [data[peak_x, 1] for peak_x in peaks]
+        plt.plot(peaks, peak_vals, 'ro')
+
     plot_img = BytesIO()
     fig.savefig(plot_img, format='png')
 
