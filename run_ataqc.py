@@ -113,6 +113,53 @@ def run_preseq(sorted_dups_bam, prefix):
     os.system(preseq)
     return preseq_data, preseq_log
 
+def get_encode_complexity_measures(preseq_log):
+    '''
+    Use info from the preseq log to calculate NRF, PBC1, and PBC2
+    '''
+    with open(preseq_log, 'rb') as fp:
+        for line in fp:
+            if line.startswith('TOTAL READS'):
+                tot_reads = float(line.strip().split("= ")[1])
+            elif  line.startswith('DISTINCT READS'):
+                distinct_reads = float(line.strip().split('= ')[1])
+            elif line.startswith('1\t'):
+                one_pair = float(line.strip().split()[1])
+            elif line.startswith('2\t'):
+                two_pair = float(line.strip().split()[1])
+
+    NRF = distinct_reads/tot_reads
+    PBC1 = one_pair/distinct_reads
+    PBC2 = one_pair/two_pair
+
+    return NRF, PBC1, PBC2
+
+def preseq_plot(data_file):
+    '''
+    Generate a preseq plot
+    '''
+    data = np.loadtxt(data_file, skiprows=1)
+    data /= 1e6  # scale to millions of reads
+
+    fig = plt.figure()
+
+    # Plot the average expected yield
+    plt.plot(data[:, 0], data[:, 1], 'r-')
+
+    # Plot confidence intervals
+    ci_lower, = plt.plot(data[:, 0], data[:, 2], 'b--')
+    ci_upper, = plt.plot(data[:, 0], data[:, 3], 'b--')
+    plt.legend([ci_lower], ['95% confidence interval'], loc=4)
+
+    plt.title('Preseq estimated yield')
+    plt.xlabel('Sequenced fragments [ millions ]')
+    plt.ylabel('Expected distinct fragments [ millions ]')
+
+    plot_img = BytesIO()
+    fig.savefig(plot_img, format='png')
+
+    return plot_img.getvalue()
+
 
 def make_vplot(bam_file, tss, prefix, bins=400, bp_edge=2000, processes=8,
                greenleaf_norm=True):
@@ -293,28 +340,7 @@ from scipy.signal import find_peaks_cwt
 from jinja2 import Template
 
 
-def preseq_plot(data_file):
-    data = np.loadtxt(data_file, skiprows=1)
-    data /= 1e6  # scale to millions of reads
 
-    fig = plt.figure()
-
-    # Plot the average expected yield
-    plt.plot(data[:, 0], data[:, 1], 'r-')
-
-    # Plot confidence intervals
-    ci_lower, = plt.plot(data[:, 0], data[:, 2], 'b--')
-    ci_upper, = plt.plot(data[:, 0], data[:, 3], 'b--')
-    plt.legend([ci_lower], ['95% confidence interval'], loc=4)
-
-    plt.title('Preseq estimated yield')
-    plt.xlabel('Sequenced fragments [ millions ]')
-    plt.ylabel('Expected distinct fragments [ millions ]')
-
-    plot_img = BytesIO()
-    fig.savefig(plot_img, format='png')
-
-    return plot_img.getvalue()
 
 
 def read_picard_histogram(data_file):
@@ -624,6 +650,7 @@ def main():
     # Set up the log file
     logging.basicConfig(filename='test.log',level=logging.DEBUG)
 
+
     # Sequencing metrics: Bowtie1/2 alignment log, chrM, GC bias
     BOWTIE_STATS = get_bowtie_stats(ALIGNMENT_LOG)
     fraction_chr_m = get_chr_m(QSORT_BAM)
@@ -631,9 +658,11 @@ def main():
                                          REF,
                                          OUTPUT_PREFIX)
 
-    # Library complexity: Preseq results - CS's stuff, to integrate.
-    # Get PBC and NRF?
-#    run_preseq(justAlignedQnameSortBam, OUTPREFIX)
+    # Library complexity: Preseq results, NRF, PBC1, PBC2
+    # preseq_data, preseq_log = run_preseq(justAlignedQnameSortBam, OUTPREFIX)
+    preseq_log = '/srv/scratch/dskim89/tmp/ataqc/KeraFreshDay01minA_1.trim.preseq.log'
+    preseq_data = '/srv/scratch/dskim89/tmp/ataqc/KeraFreshDay01minA_1.trim.preseq.dat'
+    NRF, PBC1, PBC2 = get_encode_complexity_measures(preseq_log)
 
     # Filtering metrics: duplicates, map quality
     fract_mapq = get_fract_mapq(ALIGNED_BAM)
@@ -692,7 +721,7 @@ def main():
         'final_stats': FINAL_BAM_STATS,
         'annot_enrichments': ANNOT_ENRICHMENTS,
         'enrichment_plots': TEST_ENRICHMENT_PLOTS,
-        'yield_prediction': b64encode(preseq_plot('/srv/scratch/dskim89/tmp/ataqc/KeraFreshDay01minA_1.trim.preseq.dat')),
+        'yield_prediction': b64encode(preseq_plot(preseq_data)),
         'fraglen_dist': b64encode(fragment_length_plot(insert_data)),
     }
 
