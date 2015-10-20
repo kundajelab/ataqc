@@ -14,6 +14,10 @@ import multiprocessing
 import numpy as np
 from matplotlib import pyplot as plt
 
+import argparse
+import logging
+# logging.logging
+
 
 def get_bowtie_stats(bowtie_alignment_log):
     '''
@@ -26,7 +30,7 @@ def get_bowtie_stats(bowtie_alignment_log):
     with open(bowtie_alignment_log, 'rb') as fp:
         for line in fp:
             print line.strip()
-            bowtie_stats.append(line.strip())
+            bowtie_stats.append(line)
     return bowtie_stats
 
 
@@ -56,7 +60,7 @@ def get_gc(qsorted_bam_file, reference_fasta, prefix):
     plot_file = '{0}_gcPlot.pdf'.format(prefix)
     summary_file = '{0}_gcSummary.txt'.format(prefix)
     get_gc_metrics = ('java -Xmx4G -jar '
-                      '/software/picard-tools/1.129/picard.jar '
+                      '/software/picard-tools/1.129/picard.jar ' # environment variable $PICARD instead of hardcoding path
                       'CollectGcBiasMetrics R={0} I={1} O={2} '
                       'CHART={3} S={4}').format(reference_fasta,
                                                 qsorted_bam_file,
@@ -66,6 +70,13 @@ def get_gc(qsorted_bam_file, reference_fasta, prefix):
     print get_gc_metrics
     os.system(get_gc_metrics)
     return output_file, plot_file, summary_file
+
+def plot_gc(data_file):
+    '''
+    Replot the Picard output as png file to put into the html
+    '''
+    
+    return None
 
 
 def run_preseq(sorted_dups_bam, prefix): # PUT THE RESULTS INTO OUTPUT FOLDER
@@ -92,8 +103,8 @@ def make_vplot(bam_file, tss, prefix, bins=100, processes=8):
     at each TSS ordered by strength.
     '''
     print 'Generating vplot...'
-    vplot_file = '{0}_vplot.pdf'.format(prefix)
-    vplot_large_file = '{0}_large_vplot.pdf'.format(prefix)
+    vplot_file = '{0}_vplot.png'.format(prefix)
+    vplot_large_file = '{0}_large_vplot.png'.format(prefix)
 
     # Load the TSS file
     tss = pybedtools.BedTool(tss)
@@ -152,7 +163,7 @@ def get_picard_dup_stats(picard_dup_file):
             if mark == 2:
                 line_elems = line.strip().split('\t')
                 dup_stats['PERCENT_DUPLICATION'] = line_elems[7]
-                return dup_stats
+                return line_elems[7]
 
             if mark > 0:
                 mark += 1
@@ -191,13 +202,13 @@ def get_final_read_count(first_bam, last_bam):
     return num_reads_last_bam, float(num_reads_last_bam)/num_reads_first_bam
 
 
-def get_insert_distribution(final_bam):
+def get_insert_distribution(final_bam, prefix):
     '''
     Calls Picard CollectInsertSizeMetrics
     '''
     print 'insert size distribution...'
-    insert_data = '{0}.hist_data.log'.format(final_bam)
-    insert_plot = '{0}.hist_graph.pdf'.format(final_bam)
+    insert_data = '{0}.inserts.hist_data.log'.format(prefix)
+    insert_plot = '{0}.inserts.hist_graph.pdf'.format(prefix)
     graph_insert_dist = ('java -Xmx4G -jar '
                          '/software/picard-tools/1.129/picard.jar '
                          'CollectInsertSizeMetrics '
@@ -234,7 +245,8 @@ def get_signal_to_noise(final_bed, dnase_regions, blacklist_regions):
     for interval in blacklist_reads:
         blacklist_read_count += int(interval[-1])
 
-    return dnase_read_count, blacklist_read_count, tn5_read_count
+    return float(dnase_read_count)/tn5_read_count, \
+           float(blacklist_read_count)/tn5_read_count
 
 
 # ===========================================================
@@ -422,6 +434,52 @@ html_template = Template("""
 
   <h2>Alignment statistics</h2>
 
+  <h3>Bowtie alignment log</h3>
+  <table>
+    <tbody>
+      {% for line in sample['bowtie_stats'] %}
+      <tr>
+        <td>{{ line }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+
+  <h3>Mitochondrial fraction</h3>
+  {{ sample['fraction_chr_m'] }}
+
+  <h3>GC bias</h3>
+  <embed src="data:application/pdf;base64,{{ sample['gc_bias'] }}" width='600' height='600'>
+
+  <h3>Mapping quality (Fraction > q30)</h3>
+  {{ sample['fract_mapq'] }}
+
+  <h3>Percent duplication (Picard MarkDuplicates)</h3>
+  {{ sample['percent_dup'] }}
+
+  <h3>Samtools flagstat</h3>
+  <table>
+    <tbody>
+      {% for line in sample['samtools_flagstat'] %}
+      <tr>
+        <td>{{ line }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+
+  <h3>Final read stats</h3>
+  <table>
+    <tbody>
+      {% for field, value in sample['final_stats'].iteritems() %}
+      <tr>
+        <td>{{ field }}</td>
+        <td>{{ value }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+
 
   <h2>Fragment length distribution</h2>
   {{ inline_img(sample['fraglen_dist']) }}
@@ -429,6 +487,18 @@ html_template = Template("""
   <h2>Enrichment plots</h2>
   <h3>TSS enrichment plot</h3>
   {{ inline_img(sample['enrichment_plots']['tss']) }}
+
+  <h3>Annotation enrichments</h3>
+  <table>
+    <tbody>
+      {% for field, value in sample['annot_enrichments'].iteritems() %}
+      <tr>
+        <td>{{ field }}</td>
+        <td>{{ value }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
 
   <h2>Library complexity</h2>
 
@@ -439,91 +509,187 @@ html_template = Template("""
 </html>
 """)
 
-# TEST_BASIC_INFO = OrderedDict([
-#     ('Filename', 'some_atac_sample'),
-#     ('Genome', 'hg19'),
-# ])
-#
-# TEST_ENRICHMENT_PLOTS = {
-#     'tss': b64encode(open('test.png', 'rb').read())
-# }
-#
-# TEST_SAMPLE = {
-#     'name': 'some_atac_sample',
-#     'basic_info': TEST_BASIC_INFO,
-#     'enrichment_plots': TEST_ENRICHMENT_PLOTS,
-#     'yield_prediction': b64encode(preseq_plot('test.preseq.dat')),
-#     'fraglen_dist': b64encode(fragment_length_plot('test_hist_data.log')),
-# }
-#
-# print html_template.render(sample=TEST_SAMPLE)
-
 
 # ===========================================================
 
-def main():
+def parse_args():
+    '''
+    Set up the package to be run from the command line
+    '''
 
-    # Set up basic variables
-    WORKDIR='/mnt/lab_data/kundaje/projects/skin/data/fastqs/atac/2015-07-24_freshfrozen/merged/KeraFreshDay01minA'
-    OUTDIR='/srv/scratch/dskim89/tmp/ataqc'
-    FILE_PREFIX= 'KeraFreshDay01minA_1.trim'
-    PREFIX = '{0}/{1}'.format(WORKDIR, FILE_PREFIX)
-    OUTPREFIX = '{0}/{1}'.format(OUTDIR, FILE_PREFIX)
-    REF_FASTA = '/srv/scratch/dskim89/tmp/encodeHg19Male.fa'
+    parser = argparse.ArgumentParser(description='ATAC-seq QC package')
+
+    # Directories and prefixes
+    parser.add_argument('--workdir',help='Working directory')
+    parser.add_argument('--outdir', help='Output directory')
+    parser.add_argument('--outprefix', help='Output prefix')
 
     # Annotation files
-    ANNOTDIR='/users/dskim89/git/ataqc/annotations'
-    dnase_regions = '{0}/{1}'.format(ANNOTDIR, 'reg2map_honeybadger2_dnase_all_p2.bed.gz')
-    blacklist_regions = '{0}/{1}'.format(ANNOTDIR, 'Anshul_Hg19UltraHighSignalArtifactRegions.bed.gz')
-    tss = '/users/dskim89/git/pipelines/atac/tss/parsed_hg19_RefSeq.merged.ANS.bed'
+    parser.add_argument('--ref', help='Reference fasta file')
+    parser.add_argument('--tss', help='TSS file')
+    parser.add_argument('--dnase', help='Open chromatin region file')
+    parser.add_argument('--blacklist', help='Blacklisted region file')
 
-    # Define the different files needed for QC
-    justAlignedBam = '{0}.bam'.format(PREFIX)
-    justAlignedBamLog = '{0}.align.log'.format(PREFIX)
-    justAlignedQnameSortBam = '{0}.sort.bam'.format(PREFIX)
-    justAlignedCoordSortBam = '{0}.filt.srt.nodup.bam'.format(PREFIX)
-    picardDupMetricsFile = '{0}.filt.srt.dup.qc'.format(PREFIX)
-    finalBam = '{0}.filt.srt.nodup.nonchrM.bam'.format(PREFIX)
-    finalBed = '{0}.filt.srt.nodup.nonchrM.tn5.bed.gz'.format(PREFIX)
+    # Choose which mode
+    parser.add_argument('--pipeline',
+                        default='kundajelab',
+                        help='Specific pipeline was used')
 
+    # Mode 1: Provide an input prefix
+    parser.add_argument('--inprefix', help='Input file prefix')
+
+    # Mode 2: Define every possible QC file
+    parser.add_argument('--alignedbam', help='BAM file from the aligner')
+    parser.add_argument('--alignmentlog', help='Alignment log')
+    parser.add_argument('--qsortedbam', help='BAM file sorted by QNAME')
+    parser.add_argument('--coordsortbam', help='BAM file sorted by coordinate')
+    parser.add_argument('--duplog', help='Picard duplicate metrics file')
+    parser.add_argument('--finalbam', help='Final filtered BAM file')
+    parser.add_argument('--finalbed',
+                        help='Final filtered alignments in BED format')
+
+    args = parser.parse_args()
+
+    # Set up all variables
+    INPUT_PREFIX = '{0}/{1}'.format(args.workdir, args.inprefix)
+    OUTPUT_PREFIX = '{0}/{1}'.format(args.outdir, args.outprefix)
+    NAME = args.outprefix
+
+    # Set up annotations
+    REF = args.ref
+    TSS = args.tss
+    DNASE = args.dnase
+    BLACKLIST = args.blacklist
+
+    # If mode 1
+    if args.pipeline == 'kundajelab':
+        ALIGNED_BAM = '{0}.bam'.format(INPUT_PREFIX)
+        ALIGNMENT_LOG = '{0}.align.log'.format(INPUT_PREFIX)
+        QSORT_BAM = '{0}.sort.bam'.format(INPUT_PREFIX)
+        COORDSORT_BAM = '{0}.filt.srt.nodup.bam'.format(INPUT_PREFIX)
+        DUP_LOG = '{0}.filt.srt.dup.qc'.format(INPUT_PREFIX)
+        FINAL_BAM = '{0}.filt.srt.nodup.nonchrM.bam'.format(INPUT_PREFIX)
+        FINAL_BED = '{0}.filt.srt.nodup.nonchrM.tn5.bed.gz'.format(INPUT_PREFIX)
+    else:
+        ALIGNED_BAM = args.alignedbam
+        ALIGNMENT_LOG = args.alignmentlog
+        QSORT_BAM = args.qsortedbam
+        COORDSORT_BAM = args.coordsortbam
+        DUP_LOG = args.duplog
+        FINAL_BAM = args.finalbam
+        FINAL_BED = args.finalbed
+
+
+
+    return NAME, OUTPUT_PREFIX, REF, TSS, DNASE, BLACKLIST, ALIGNED_BAM, \
+           ALIGNMENT_LOG, QSORT_BAM, COORDSORT_BAM, DUP_LOG, FINAL_BAM, \
+           FINAL_BED
+
+
+def main():
+
+    # # Set up basic variables
+    # WORKDIR='/mnt/lab_data/kundaje/projects/skin/data/fastqs/atac/2015-07-24_freshfrozen/merged/KeraFreshDay01minA'
+    # OUTDIR='/srv/scratch/dskim89/tmp/ataqc'
+    # FILE_PREFIX= 'KeraFreshDay01minA_1.trim'
+    # PREFIX = '{0}/{1}'.format(WORKDIR, FILE_PREFIX)
+    # OUTPREFIX = '{0}/{1}'.format(OUTDIR, FILE_PREFIX)
+    # REF_FASTA = '/srv/scratch/dskim89/tmp/encodeHg19Male.fa'
+    #
+    # # Annotation files
+    # ANNOTDIR='/users/dskim89/git/ataqc/annotations'
+    # dnase_regions = '{0}/{1}'.format(ANNOTDIR, 'reg2map_honeybadger2_dnase_all_p2.bed.gz')
+    # blacklist_regions = '{0}/{1}'.format(ANNOTDIR, 'Anshul_Hg19UltraHighSignalArtifactRegions.bed.gz')
+    # tss = '/users/dskim89/git/pipelines/atac/tss/parsed_hg19_RefSeq.merged.ANS.bed'
+    #
+    # # Define the different files needed for QC
+    # justAlignedBam = '{0}.bam'.format(PREFIX)
+    # justAlignedBamLog = '{0}.align.log'.format(PREFIX)
+    # justAlignedQnameSortBam = '{0}.sort.bam'.format(PREFIX)
+    # justAlignedCoordSortBam = '{0}.filt.srt.nodup.bam'.format(PREFIX)
+    # picardDupMetricsFile = '{0}.filt.srt.dup.qc'.format(PREFIX)
+    # finalBam = '{0}.filt.srt.nodup.nonchrM.bam'.format(PREFIX)
+    # finalBed = '{0}.filt.srt.nodup.nonchrM.tn5.bed.gz'.format(PREFIX)
+
+    [ NAME, OUTPUT_PREFIX, REF, TSS, DNASE, BLACKLIST, \
+      ALIGNED_BAM, ALIGNMENT_LOG, QSORT_BAM, COORDSORT_BAM, \
+      DUP_LOG, FINAL_BAM, FINAL_BED ] = parse_args()
 
     # Sequencing metrics: Bowtie1/2 alignment log, chrM, GC bias
-    bowtie_stats = get_bowtie_stats(justAlignedBamLog)
-    fraction_chr_m = get_chr_m(justAlignedQnameSortBam)
-    gc_out, gc_plot, gc_summary = get_gc(justAlignedCoordSortBam,
-                                         REF_FASTA,
-                                         OUTPREFIX)
+    BOWTIE_STATS = get_bowtie_stats(ALIGNMENT_LOG)
+    fraction_chr_m = get_chr_m(QSORT_BAM)
+    gc_out, gc_plot, gc_summary = get_gc(COORDSORT_BAM,
+                                         REF,
+                                         OUTPUT_PREFIX)
 
     # Library complexity: Preseq results - CS's stuff, to integrate.
     # Get PBC and NRF?
-    run_preseq(justAlignedQnameSortBam, OUTPREFIX)
-    preseq_plot(justAlignedQnameSortBam)
+#    run_preseq(justAlignedQnameSortBam, OUTPREFIX)
 
     # Filtering metrics: duplicates, map quality
-    fract_mapq = get_fract_mapq(justAlignedBam)
-    dup_stats = get_picard_dup_stats(picardDupMetricsFile)
-    get_samtools_flagstat(finalBam)
+    fract_mapq = get_fract_mapq(ALIGNED_BAM)
+    percent_dup = get_picard_dup_stats(DUP_LOG)
+    flagstat = get_samtools_flagstat(ALIGNED_BAM)
 
     # Final read statistics
-    final_read_count, fract_reads_left = get_final_read_count(justAlignedBam,
-                                                           finalBam)
+    final_read_count, fract_reads_left = get_final_read_count(ALIGNED_BAM,
+                                                              FINAL_BAM)
 
     # Insert size distribution
-    insert_data, insert_plot = get_insert_distribution(finalBam) # bug here
-    fragment_length_plot(insert_data)
-    #fragment_length_qc(insert_data)
-
+    insert_data, insert_plot = get_insert_distribution(FINAL_BAM,
+                                                       OUTPUT_PREFIX) # bug here
+#     fragment_length_plot(insert_data)
+#     #fragment_length_qc(insert_data)
+#
     # Enrichments: V plot for enrichment
-    make_vplot(justAlignedCoordSortBam, tss, OUTPREFIX)
+    vplot_file, vplot_large_file = make_vplot(COORDSORT_BAM,
+                                              TSS, OUTPUT_PREFIX)
 
     # Signal to noise: reads in DHS regions vs not, reads falling
     # into blacklist regions
-    get_signal_to_noise(finalBed, dnase_regions, blacklist_regions)
-
-    # Roadmap data comparison?
-
+    fract_dnase, fract_blacklist = get_signal_to_noise(FINAL_BED,
+                                                       DNASE,
+                                                       BLACKLIST)
 
     # Take all this info and render the html file
+    BASIC_INFO = OrderedDict([
+        ('Filename', NAME),
+        ('Genome', 'hg19'),
+    ])
+
+    TEST_ENRICHMENT_PLOTS = {
+        'tss': b64encode(open(vplot_large_file, 'rb').read())
+    }
+
+    FINAL_BAM_STATS = OrderedDict([
+        ('Final read count', final_read_count),
+        ('Fraction of reads after filtering', fract_reads_left),
+    ])
+
+    ANNOT_ENRICHMENTS = OrderedDict([
+        ('Fraction of reads in universal DHS regions', fract_dnase),
+        ('Fraction of reads in blacklist regions', fract_blacklist),
+    ])
+
+    TEST_SAMPLE = {
+        'name': NAME,
+        'basic_info': BASIC_INFO,
+        'bowtie_stats': BOWTIE_STATS,
+        'fraction_chr_m': fraction_chr_m,
+        'gc_bias': open(gc_plot, 'rb').read().encode('base64'),
+        'fract_mapq': fract_mapq,
+        'percent_dup': percent_dup,
+        'samtools_flagstat': flagstat,
+        'final_stats': FINAL_BAM_STATS,
+        'annot_enrichments': ANNOT_ENRICHMENTS,
+        'enrichment_plots': TEST_ENRICHMENT_PLOTS,
+        'yield_prediction': b64encode(preseq_plot('/srv/scratch/dskim89/tmp/ataqc/KeraFreshDay01minA_1.trim.preseq.dat')),
+        'fraglen_dist': b64encode(fragment_length_plot(insert_data)),
+    }
+
+    test_html = open('test.html', 'w')
+    test_html.write(html_template.render(sample=TEST_SAMPLE))
+    test_html.close()
 
     return None
 
