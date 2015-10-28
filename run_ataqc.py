@@ -229,6 +229,8 @@ def get_encode_complexity_measures(preseq_log):
     PBC1 = one_pair/distinct_reads
     PBC2 = one_pair/two_pair
 
+    # QC check
+
     return NRF, PBC1, PBC2
 
 def preseq_plot(data_file):
@@ -339,7 +341,7 @@ def get_picard_dup_stats(picard_dup_file):
             if mark == 2:
                 line_elems = line.strip().split('\t')
                 dup_stats['PERCENT_DUPLICATION'] = line_elems[7]
-                return '{0:.3f}'.format(float(line_elems[7]))
+                return float(line_elems[7])
 
             if mark > 0:
                 mark += 1
@@ -359,7 +361,7 @@ def get_samtools_flagstat(bam_file):
     return flagstat
 
 
-def get_fract_mapq(bam_file, q='30'):
+def get_fract_mapq(bam_file, q=30):
     '''
     Runs samtools view to get the fraction of reads of a certain
     map quality.
@@ -370,7 +372,7 @@ def get_fract_mapq(bam_file, q='30'):
     # There is a bug in pysam.view('-c'), so just use subprocess
     num_qreads = int(subprocess.check_output(['samtools',
                                               'view', '-c',
-                                              '-q', q, bam_file]).strip())
+                                              '-q', str(q), bam_file]).strip())
     tot_reads = int(subprocess.check_output(['samtools',
                                              'view', '-c',
                                              bam_file]).strip())
@@ -429,7 +431,7 @@ def get_fract_reads_in_regions(reads_bed, regions_bed):
         read_count += int(interval[-1])
     fract_reads = float(read_count)/reads_bedtool.count()
 
-    return '{0:.3f}'.format(fract_reads)
+    return fract_reads
 
 
 def get_signal_to_noise(final_bed, dnase_regions, blacklist_regions, \
@@ -636,13 +638,13 @@ html_template = Template("""
   </pre>
 
   <h3>Mapping quality (Fraction > q30)</h3>
-  {{ sample['fract_mapq'] }}
+  {{ '{0:.3f}'.format(sample['fract_mapq']) }}
 
   <h3>Percent duplication (Picard MarkDuplicates)</h3>
-  {{ sample['percent_dup'] }}
+  {{ '{0:.3f}'.format(sample['percent_dup']) }}
 
   <h3>Mitochondrial fraction</h3>
-  {{ sample['fraction_chr_m'] }}
+  {{ '{0:.3f}'.format(sample['fraction_chr_m']) }}
 
   <h3>Final read stats</h3>
   <table class='qc_table'>
@@ -678,7 +680,7 @@ html_template = Template("""
       {% for field, value in sample['annot_enrichments'].iteritems() %}
       <tr>
         <td>{{ field }}</td>
-        <td>{{ value }}</td>
+        <td>{{ '{0:.3f}'.format(value) }}</td>
       </tr>
       {% endfor %}
     </tbody>
@@ -691,7 +693,7 @@ html_template = Template("""
       {% for field, value in sample['library_complexity'].iteritems() %}
       <tr>
         <td>{{ field }}</td>
-        <td>{{ value }}</td>
+        <td>{{ '{0:.3f}'.format(value) }}</td>
       </tr>
       {% endfor %}
     </tbody>
@@ -764,7 +766,8 @@ def parse_args():
     PROM = args.prom
     ENH = args.enh
 
-    # If mode 1
+    # If mode 1 - TO BE DEPRECATED. In this case, the module is run with 
+    # Jin's pipeline
     if args.pipeline == 'kundajelab':
         ALIGNED_BAM = '{0}.bam'.format(INPUT_PREFIX)
         ALIGNMENT_LOG = '{0}.align.log'.format(INPUT_PREFIX)
@@ -872,19 +875,18 @@ def main():
     ])
 
     LIBRARY_COMPLEXITY = OrderedDict([
-        ('NRF', '{0:.3f}'.format(NRF)),
-        ('PBC1', '{0:.3f}'.format(PBC1)),
-        ('PBC2', '{0:.3f}'.format(PBC2)),
-
+        ('NRF', NRF),
+        ('PBC1', PBC1),
+        ('PBC2', PBC2),
     ])
 
     SAMPLE = {
         'name': NAME,
         'basic_info': BASIC_INFO,
         'bowtie_stats': BOWTIE_STATS,
-        'fraction_chr_m': '{0:.3f}'.format(fraction_chr_m),
+        'fraction_chr_m': fraction_chr_m,
         'gc_bias': b64encode(plot_gc(gc_out)),
-        'fract_mapq': '{0:.3f}'.format(fract_mapq),
+        'fract_mapq': fract_mapq,
         'percent_dup': percent_dup,
         'samtools_flagstat': flagstat,
         'final_stats': FINAL_BAM_STATS,
