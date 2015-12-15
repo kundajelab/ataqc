@@ -12,6 +12,8 @@ import pybedtools
 import metaseq
 import subprocess
 import multiprocessing
+import timeit
+import datetime
 import numpy as np
 import pandas as pd
 import scipy.stats
@@ -92,6 +94,7 @@ class QCHasElementInRange(QCCheck):
                     self.lower, self.upper))
 
 
+# QC FUNCTIONS
 
 def get_bowtie_stats(bowtie_alignment_log):
     '''
@@ -567,7 +570,7 @@ def compare_to_roadmap(bw_file, regions_file, reg2map_file, metadata, output_pre
     # remember to use a UCSC formatted bed file for regions
     bw_average_over_bed = 'bigWigAverageOverBed {0} {1} {2}'.format(
                             bw_file, regions_file, out_file)
-    print bw_average_over_bed
+    logging.info(bw_average_over_bed)
     os.system(bw_average_over_bed)
 
     # Read the file back in
@@ -587,7 +590,7 @@ def compare_to_roadmap(bw_file, regions_file, reg2map_file, metadata, output_pre
         spearman_corr = scipy.stats.spearmanr(np.array(roadmap_i), 
                                               sample_mean0_col)
         results.loc[i] = [roadmap_i.name, spearman_corr[0]]
-        print roadmap_i.name, spearman_corr
+        logging.info('{0}\t{1}'.format(roadmap_i.name, spearman_corr))
 
     # Read in metadata to make the chart more understandable
     metadata = pd.read_table(metadata)
@@ -684,7 +687,10 @@ html_template = Template("""
 </head>
 
 <body>
-  <h2>Basic Information</h2>
+  <h2>ATAqC</h2>
+
+
+  <h2>Sample Information</h2>
   <table class='qc_table'>
     <tbody>
       {% for field, value in sample['basic_info'].iteritems() %}
@@ -697,8 +703,26 @@ html_template = Template("""
   </table>
 
 
-  <h2>Alignment statistics</h2>
+  <h2>Summary</h2>
+  <table class='qc_table'>
+    <tbody>
+      {% for field, value in sample['summary_stats'].iteritems() %}
+      <tr>
+        <td>{{ field }}</td>
+        <td>{{ '{0:,}'.format(value) }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+<pre>
+Note that all these read counts are determined using 'samtools view' - as such,
+these are all reads found in the file, whether one end of a pair or a single 
+end read. In other words, if your file is paired end, then you should divide 
+these counts by two.
+</pre>
 
+
+  <h2>Alignment statistics</h2>
   <h3>Bowtie alignment log</h3>
   <pre>
 {{ sample['bowtie_stats'] }}
@@ -708,6 +732,7 @@ html_template = Template("""
   <pre>
 {{ sample['samtools_flagstat'] }}
   </pre>
+
 
   <h2>Filtering statistics</h2>
   <table class='qc_table'>
@@ -721,7 +746,6 @@ html_template = Template("""
       {% endfor %}
     </tbody>
   </table>
-
   <pre>
 Mapping quality refers to the quality of the read being aligned to that 
 particular location in the genome. A standard quality score is > 30. 
@@ -733,61 +757,10 @@ fraction is an indication of poor libraries. Based on prior experience, a
 final read fraction above 0.70 is a good library.
   </pre>
 
-  <h3>GC bias</h3>
-  {{ inline_img(sample['gc_bias']) }}
-<pre>
-Open chromatin assays are known to have significant GC bias. Please take this
-into consideration as necessary.
-</pre>
-
-
-  <h2>Fragment length statistics</h2>
-  {{ inline_img(sample['fraglen_dist']) }}
-  {{ qc_table(sample['nucleosomal']) }}
-<pre>
-Open chromatin assays show distinct fragment length enrichments, as the cut 
-sites are only in open chromatin and not in nucleosomes. As such, peaks 
-representing different n-nucleosomal (ex mono-nucleosomal, di-nucleosomal) 
-fragment lengths will arise. Good libraries will show these peaks in a 
-fragment length distribution and will show specific peak ratios.
-</pre>
-
-  <h2>Enrichment plots (TSS)</h2>
-  {{ inline_img(sample['enrichment_plots']['tss']) }}
-  <pre>
-Open chromatin assays should show enrichment in open chromatin sites, such as
-TSS's. An average TSS enrichment is above 6-7. A strong TSS enrichment is 
-above 10.
-  </pre>
-
-  <h2>Annotation enrichments</h2>
-  <table class='qc_table'>
-    <tbody>
-      {% for field, value in sample['annot_enrichments'].iteritems() %}
-      <tr>
-        <td>{{ field }}</td>
-        <td>{{ '{0:,}'.format(value[0]) }}</td>
-        <td>{{ '{0:.3f}'.format(value[1]) }}</td>
-      </tr>
-      {% endfor %}
-    </tbody>
-  </table>
-
-<pre>
-Signal to noise can be assessed by considering whether reads are falling into
-known open regions (such as DHS regions) or not. A high fraction of reads 
-should fall into the universal (across cell type) DHS set. A small fraction
-should fall into the blacklist regions. A high set (though not all) should
-fall into the promoter regions. A high set (though not all) should fall into 
-the enhancer regions. The promoter regions should not take up all reads, as
-it is known that there is a bias for promoters in open chromatin assays.
-</pre>
-
 
   <h2>Library complexity statistics</h2>
   <h3>ENCODE library complexity metrics</h3>
   {{ qc_table(sample['encode_lib_complexity']) }}
-
 <pre>
 The non-redundant fraction (NRF) is the fraction of non-redundant mapped reads 
 in a dataset; it is the ratio between the number of positions in the genome 
@@ -802,7 +775,6 @@ two read pairs. The PBC2 should be significantly greater than 1.
 
   <h3>Yield prediction</h3>
   {{ inline_img(sample['yield_prediction']) }}
-
 <pre>
 Preseq performs a yield prediction by subsampling the reads, calculating the
 number of distinct reads, and then extrapolating out to see where the 
@@ -810,9 +782,63 @@ expected number of distinct reads no longer increases. The confidence interval
 gives a gauge as to the validity of the yield predictions.
 </pre>
 
+
+  <h2>Fragment length statistics</h2>
+  {{ inline_img(sample['fraglen_dist']) }}
+  {{ qc_table(sample['nucleosomal']) }}
+<pre>
+Open chromatin assays show distinct fragment length enrichments, as the cut 
+sites are only in open chromatin and not in nucleosomes. As such, peaks 
+representing different n-nucleosomal (ex mono-nucleosomal, di-nucleosomal) 
+fragment lengths will arise. Good libraries will show these peaks in a 
+fragment length distribution and will show specific peak ratios.
+</pre>
+
+
+  <h2>Sequence quality metrics</h2>
+  <h3>GC bias</h3>
+  {{ inline_img(sample['gc_bias']) }}
+<pre>
+Open chromatin assays are known to have significant GC bias. Please take this
+into consideration as necessary.
+</pre>
+
+
+  <h2>Annotation-based quality metrics</h2>
+
+  <h3>Enrichment plots (TSS)</h3>
+  {{ inline_img(sample['enrichment_plots']['tss']) }}
+  <pre>
+Open chromatin assays should show enrichment in open chromatin sites, such as
+TSS's. An average TSS enrichment is above 6-7. A strong TSS enrichment is 
+above 10.
+  </pre>
+
+  <h3>Annotated genomic region enrichments</h3>
+  <table class='qc_table'>
+    <tbody>
+      {% for field, value in sample['annot_enrichments'].iteritems() %}
+      <tr>
+        <td>{{ field }}</td>
+        <td>{{ '{0:,}'.format(value[0]) }}</td>
+        <td>{{ '{0:.3f}'.format(value[1]) }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+<pre>
+Signal to noise can be assessed by considering whether reads are falling into
+known open regions (such as DHS regions) or not. A high fraction of reads 
+should fall into the universal (across cell type) DHS set. A small fraction
+should fall into the blacklist regions. A high set (though not all) should
+fall into the promoter regions. A high set (though not all) should fall into 
+the enhancer regions. The promoter regions should not take up all reads, as
+it is known that there is a bias for promoters in open chromatin assays.
+</pre>
+
+
   <h2>Comparison to Roadmap DNase</h2>
   {{ inline_img(sample['roadmap_plot']) }}
-
 <pre>
 This bar chart shows the correlation between the Roadmap DNase samples to
 your sample, when the signal in the universal DNase peak region sets are 
@@ -823,12 +849,14 @@ to your sample, the higher the correlation.
 
   <h2>Read summary</h2>
   {{ inline_img(sample['read_tracker']) }}
-
 <pre>
 This bar chart shows the filtering process and where the reads were lost
 over the process. Note that each step is sequential - as such, there may
 have been more mitochondrial reads which were already filtered because of
-high duplication or low mapping quality.
+high duplication or low mapping quality. Note that all these read counts are 
+determined using 'samtools view' - as such, these are all reads found in 
+the file, whether one end of a pair or a single end read. In other words, 
+if your file is paired end, then you should divide these counts by two.
 </pre>
 
 </body>
@@ -852,6 +880,7 @@ def parse_args():
     parser.add_argument('--outprefix', help='Output prefix')
 
     # Annotation files
+    parser.add_argument('--genome', help='Genome build used')
     parser.add_argument('--ref', help='Reference fasta file')
     parser.add_argument('--tss', help='TSS file')
     parser.add_argument('--dnase', help='Open chromatin region file')
@@ -889,6 +918,7 @@ def parse_args():
     NAME = args.outprefix
 
     # Set up annotations
+    GENOME = args.genome
     REF = args.ref
     TSS = args.tss
     DNASE = args.dnase
@@ -919,7 +949,7 @@ def parse_args():
         FINAL_BED = args.finalbed
         BIGWIG = args.bigwig
 
-    return NAME, OUTPUT_PREFIX, REF, TSS, DNASE, BLACKLIST, PROM, ENH, REG2MAP, ROADMAP_META, \
+    return NAME, OUTPUT_PREFIX, REF, TSS, DNASE, BLACKLIST, PROM, ENH, REG2MAP, ROADMAP_META, GENOME, \
            ALIGNED_BAM, ALIGNMENT_LOG, QSORT_BAM, COORDSORT_BAM, DUP_LOG, \
            FINAL_BAM, FINAL_BED, BIGWIG
 
@@ -927,13 +957,13 @@ def parse_args():
 def main():
 
     # Parse args
-    [ NAME, OUTPUT_PREFIX, REF, TSS, DNASE, BLACKLIST, PROM, ENH, REG2MAP, ROADMAP_META, \
+    [ NAME, OUTPUT_PREFIX, REF, TSS, DNASE, BLACKLIST, PROM, ENH, REG2MAP, ROADMAP_META, GENOME, \
       ALIGNED_BAM, ALIGNMENT_LOG, QSORT_BAM, COORDSORT_BAM, \
       DUP_LOG, FINAL_BAM, FINAL_BED, BIGWIG ] = parse_args()
 
-    # Set up the log file
+    # Set up the log file and timing
     logging.basicConfig(filename='test.log',level=logging.DEBUG)
-
+    start = timeit.default_timer()
 
     # Compare to roadmap
     roadmap_compare_plot = compare_to_roadmap(BIGWIG, DNASE, REG2MAP, 
@@ -996,8 +1026,15 @@ def main():
 
     # Take all this info and render the html file
     BASIC_INFO = OrderedDict([
-        ('Filename', NAME),
-        ('Genome', 'hg19'),
+        ('Sample', NAME),
+        ('Genome', GENOME),
+    ])
+
+    SUMMARY_STATS = OrderedDict([
+        ('Read count successfully aligned', first_read_count),
+        ('Read count after filtering for mapping quality', num_mapq),
+        ('Read count after removing duplicate reads', int(num_mapq - read_dups)),
+        ('Read count after removing mitochondrial reads (final read count)', final_read_count),
     ])
 
     FILTERING_STATS = OrderedDict([
@@ -1021,6 +1058,7 @@ def main():
     SAMPLE = {
         'name': NAME,
         'basic_info': BASIC_INFO,
+        'summary_stats': SUMMARY_STATS,
         'bowtie_stats': BOWTIE_STATS,
         'filtering_stats': FILTERING_STATS,
         'fraction_chr_m': fraction_chr_m,
@@ -1041,6 +1079,9 @@ def main():
     results = open('test.html', 'w')
     results.write(html_template.render(sample=SAMPLE))
     results.close()
+
+    stop = timeit.default_timer()
+    print "Run time:", str(datetime.timedelta(seconds=int(stop - start)))
 
     return None
 
