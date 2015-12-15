@@ -1,5 +1,5 @@
 # Daniel Kim, CS Foo
-# 2015-10-20
+# 2015-12-14
 # Script to run ataqc, all parts
 
 import matplotlib
@@ -13,6 +13,8 @@ import metaseq
 import subprocess
 import multiprocessing
 import numpy as np
+import pandas as pd
+import scipy.stats
 from matplotlib import pyplot as plt
 
 import argparse
@@ -230,8 +232,12 @@ def get_encode_complexity_measures(preseq_log):
     PBC2 = one_pair/two_pair
 
     # QC check
+    results = []
+    results.append(QCGreaterThanEqualCheck('NRF', 0.8)(NRF))
+    results.append(QCGreaterThanEqualCheck('PBC1', 0.8)(PBC1))
+    results.append(QCGreaterThanEqualCheck('PBC2', 1.0)(PBC2))
 
-    return NRF, PBC1, PBC2
+    return results
 
 def preseq_plot(data_file):
     '''
@@ -341,7 +347,9 @@ def get_picard_dup_stats(picard_dup_file):
             if mark == 2:
                 line_elems = line.strip().split('\t')
                 dup_stats['PERCENT_DUPLICATION'] = line_elems[7]
-                return float(line_elems[7])
+                dup_stats['READ_PAIR_DUPLICATES'] = line_elems[5]
+                dup_stats['READ_PAIRS_EXAMINED'] = line_elems[2]
+                return float(line_elems[5]), float(line_elems[7])
 
             if mark > 0:
                 mark += 1
@@ -377,7 +385,7 @@ def get_fract_mapq(bam_file, q=30):
                                              'view', '-c',
                                              bam_file]).strip())
     fract_good_mapq = float(num_qreads)/tot_reads
-    return fract_good_mapq
+    return num_qreads, fract_good_mapq
 
 
 def get_final_read_count(first_bam, last_bam):
@@ -431,7 +439,7 @@ def get_fract_reads_in_regions(reads_bed, regions_bed):
         read_count += int(interval[-1])
     fract_reads = float(read_count)/reads_bedtool.count()
 
-    return fract_reads
+    return read_count, fract_reads
 
 
 def get_signal_to_noise(final_bed, dnase_regions, blacklist_regions, \
@@ -443,18 +451,19 @@ def get_signal_to_noise(final_bed, dnase_regions, blacklist_regions, \
     logging.info('signal to noise...')
 
     # Dnase regions
-    fract_dnase = get_fract_reads_in_regions(final_bed, dnase_regions)
+    reads_dnase, fract_dnase = get_fract_reads_in_regions(final_bed, dnase_regions)
 
     # Blacklist regions
-    fract_blacklist = get_fract_reads_in_regions(final_bed, blacklist_regions)
+    reads_blacklist, fract_blacklist = get_fract_reads_in_regions(final_bed, blacklist_regions)
 
     # Prom regions
-    fract_prom = get_fract_reads_in_regions(final_bed, prom_regions)
+    reads_prom, fract_prom = get_fract_reads_in_regions(final_bed, prom_regions)
 
     # Enh regions
-    fract_enh = get_fract_reads_in_regions(final_bed, enh_regions)
+    reads_enh, fract_enh = get_fract_reads_in_regions(final_bed, enh_regions)
 
-    return fract_dnase, fract_blacklist, fract_prom, fract_enh
+    return reads_dnase, fract_dnase, reads_blacklist, fract_blacklist, \
+           reads_prom, fract_prom, reads_enh, fract_enh
 
 
 def track_reads(reads_list, labels):
@@ -542,6 +551,69 @@ def fragment_length_plot(data_file, peaks=None):
 
     plot_img = BytesIO()
     fig.savefig(plot_img, format='png')
+
+    return plot_img.getvalue()
+
+def compare_to_roadmap(bw_file, regions_file, reg2map_file, metadata, output_prefix):
+    '''
+    Takes a bigwig file and signal file, gets the bwAverageOverBed,
+    then compares that signal with the signal in the Roadmap 
+    regions
+    '''
+
+    out_file = '{0}.signal'.format(output_prefix)
+
+    # First get the signal vals for the peak regions
+    # remember to use a UCSC formatted bed file for regions
+    bw_average_over_bed = 'bigWigAverageOverBed {0} {1} {2}'.format(
+                            bw_file, regions_file, out_file)
+    print bw_average_over_bed
+    os.system(bw_average_over_bed)
+
+    # Read the file back in
+    sample_data = pd.read_table(out_file, header=None)
+    sample_mean0_col = np.array(sample_data.iloc[:,5])
+
+    # Then, calculate correlations with all other Roadmap samples and rank
+    # the correlations
+    roadmap_signals = pd.read_table(reg2map_file, compression='gzip')
+    (nrow, ncol) = roadmap_signals.shape
+
+
+    results = pd.DataFrame(columns=('eid', 'corr'))
+    for i in range(ncol):
+        # Slice, run correlation
+        roadmap_i = roadmap_signals.iloc[:,i]
+        spearman_corr = scipy.stats.spearmanr(np.array(roadmap_i), 
+                                              sample_mean0_col)
+        results.loc[i] = [roadmap_i.name, spearman_corr[0]]
+        print roadmap_i.name, spearman_corr
+
+    # Read in metadata to make the chart more understandable
+    metadata = pd.read_table(metadata)
+    metadata.columns = ['eid', 'mnemonic']
+
+    merged = pd.merge(metadata, results, on='eid')
+
+    sorted_results = merged.sort('corr', ascending=True)
+
+    # Plot results
+    pos = np.array(range(ncol)) + 0.5
+    fig = plt.figure()
+    plt.barh(pos, sorted_results['corr'], align='center', height=1.0)
+    plt.yticks(pos, sorted_results['mnemonic'].tolist(), fontsize=7)
+    # plt.rcParams['ytick.labelsize'] = 6
+    plt.xlabel('Spearmans correlation')
+    plt.title('Signal correlation to Roadmap DNase')
+    plt.axis('tight')
+    ax = plt.axes()
+    ax.yaxis.set_ticks_position('none')
+    ax.spines['right'].set_visible(False)
+    ax.spines['top'].set_visible(False)
+
+    plot_img = BytesIO()
+    fig.savefig(plot_img, format='png', bbox_inches='tight')    
+    fig.savefig('test.png', format='png', bbox_inches='tight')
 
     return plot_img.getvalue()
 
@@ -637,41 +709,55 @@ html_template = Template("""
 {{ sample['samtools_flagstat'] }}
   </pre>
 
-  <h3>Mapping quality (Fraction > q30)</h3>
-  {{ '{0:.3f}'.format(sample['fract_mapq']) }}
-
-  <h3>Percent duplication (Picard MarkDuplicates)</h3>
-  {{ '{0:.3f}'.format(sample['percent_dup']) }}
-
-  <h3>Mitochondrial fraction</h3>
-  {{ '{0:.3f}'.format(sample['fraction_chr_m']) }}
-
-  <h3>Final read stats</h3>
+  <h2>Filtering statistics</h2>
   <table class='qc_table'>
     <tbody>
-      {% for field, value in sample['final_stats'].iteritems() %}
+      {% for field, value in sample['filtering_stats'].iteritems() %}
       <tr>
         <td>{{ field }}</td>
-        <td>{{ value }}</td>
+        <td>{{ '{0:,}'.format(value[0]) }}</td>
+        <td>{{ '{0:.3f}'.format(value[1]) }}</td>
       </tr>
       {% endfor %}
     </tbody>
   </table>
 
+  <pre>
+Mapping quality refers to the quality of the read being aligned to that 
+particular location in the genome. A standard quality score is > 30. 
+Duplications are often due to PCR duplication rather than two unique reads
+mapping to the same location. High duplication is an indication of poor 
+libraries. Mitochondrial reads are often high in chromatin accessibility
+assays because the mitochondrial genome is very open. A high mitochondrial
+fraction is an indication of poor libraries. Based on prior experience, a
+final read fraction above 0.70 is a good library.
+  </pre>
+
   <h3>GC bias</h3>
   {{ inline_img(sample['gc_bias']) }}
+<pre>
+Open chromatin assays are known to have significant GC bias. Please take this
+into consideration as necessary.
+</pre>
 
 
-  <h2>Fragment length distribution</h2>
+  <h2>Fragment length statistics</h2>
   {{ inline_img(sample['fraglen_dist']) }}
   {{ qc_table(sample['nucleosomal']) }}
-
+<pre>
+Open chromatin assays show distinct fragment length enrichments, as the cut 
+sites are only in open chromatin and not in nucleosomes. As such, peaks 
+representing different n-nucleosomal (ex mono-nucleosomal, di-nucleosomal) 
+fragment lengths will arise. Good libraries will show these peaks in a 
+fragment length distribution and will show specific peak ratios.
+</pre>
 
   <h2>Enrichment plots (TSS)</h2>
   {{ inline_img(sample['enrichment_plots']['tss']) }}
   <pre>
-  An average TSS enrichment is above 6-7. A strong
-  TSS enrichment is above 10.
+Open chromatin assays should show enrichment in open chromatin sites, such as
+TSS's. An average TSS enrichment is above 6-7. A strong TSS enrichment is 
+above 10.
   </pre>
 
   <h2>Annotation enrichments</h2>
@@ -680,30 +766,70 @@ html_template = Template("""
       {% for field, value in sample['annot_enrichments'].iteritems() %}
       <tr>
         <td>{{ field }}</td>
-        <td>{{ '{0:.3f}'.format(value) }}</td>
+        <td>{{ '{0:,}'.format(value[0]) }}</td>
+        <td>{{ '{0:.3f}'.format(value[1]) }}</td>
       </tr>
       {% endfor %}
     </tbody>
   </table>
 
-  <h2>Library complexity</h2>
+<pre>
+Signal to noise can be assessed by considering whether reads are falling into
+known open regions (such as DHS regions) or not. A high fraction of reads 
+should fall into the universal (across cell type) DHS set. A small fraction
+should fall into the blacklist regions. A high set (though not all) should
+fall into the promoter regions. A high set (though not all) should fall into 
+the enhancer regions. The promoter regions should not take up all reads, as
+it is known that there is a bias for promoters in open chromatin assays.
+</pre>
+
+
+  <h2>Library complexity statistics</h2>
   <h3>ENCODE library complexity metrics</h3>
-  <table class='qc_table'>
-    <tbody>
-      {% for field, value in sample['library_complexity'].iteritems() %}
-      <tr>
-        <td>{{ field }}</td>
-        <td>{{ '{0:.3f}'.format(value) }}</td>
-      </tr>
-      {% endfor %}
-    </tbody>
-  </table>
+  {{ qc_table(sample['encode_lib_complexity']) }}
+
+<pre>
+The non-redundant fraction (NRF) is the fraction of non-redundant mapped reads 
+in a dataset; it is the ratio between the number of positions in the genome 
+that uniquely mapped reads map to and the total number of uniquely mappable 
+reads. The NRF should be > 0.8. The PBC1 is the ratio of genomic locations
+with EXACTLY one read pair over the genomic locations with AT LEAST one read 
+pair. PBC1 is the primary measure, and the PBC1 should be close to 1 (if PBC1 
+is less than 0.5, the library is poor). The PBC2 is the ratio of genomic 
+locations with EXACTLY one read pair over the genomic locations with EXACTLY 
+two read pairs. The PBC2 should be significantly greater than 1.
+</pre>
 
   <h3>Yield prediction</h3>
   {{ inline_img(sample['yield_prediction']) }}
 
+<pre>
+Preseq performs a yield prediction by subsampling the reads, calculating the
+number of distinct reads, and then extrapolating out to see where the 
+expected number of distinct reads no longer increases. The confidence interval
+gives a gauge as to the validity of the yield predictions.
+</pre>
+
+  <h2>Comparison to Roadmap DNase</h2>
+  {{ inline_img(sample['roadmap_plot']) }}
+
+<pre>
+This bar chart shows the correlation between the Roadmap DNase samples to
+your sample, when the signal in the universal DNase peak region sets are 
+compared. The closer the sample is in signal distribution in the regions
+to your sample, the higher the correlation.
+</pre>
+
+
   <h2>Read summary</h2>
   {{ inline_img(sample['read_tracker']) }}
+
+<pre>
+This bar chart shows the filtering process and where the reads were lost
+over the process. Note that each step is sequential - as such, there may
+have been more mitochondrial reads which were already filtered because of
+high duplication or low mapping quality.
+</pre>
 
 </body>
 
@@ -732,6 +858,8 @@ def parse_args():
     parser.add_argument('--blacklist', help='Blacklisted region file')
     parser.add_argument('--prom', help='Promoter region file')
     parser.add_argument('--enh', help='Enhancer region file')
+    parser.add_argument('--reg2map', help='file with cell type signals')
+    parser.add_argument('--meta', help='Roadmap metadata')
 
     # Choose which mode
     parser.add_argument('--pipeline',
@@ -750,6 +878,8 @@ def parse_args():
     parser.add_argument('--finalbam', help='Final filtered BAM file')
     parser.add_argument('--finalbed',
                         help='Final filtered alignments in BED format')
+    parser.add_argument('--bigwig',
+                        help='Final bigwig')
 
     args = parser.parse_args()
 
@@ -765,6 +895,8 @@ def parse_args():
     BLACKLIST = args.blacklist
     PROM = args.prom
     ENH = args.enh
+    REG2MAP = args.reg2map
+    ROADMAP_META = args.meta
 
     # If mode 1 - TO BE DEPRECATED. In this case, the module is run with 
     # Jin's pipeline
@@ -776,6 +908,7 @@ def parse_args():
         DUP_LOG = '{0}.filt.srt.dup.qc'.format(INPUT_PREFIX)
         FINAL_BAM = '{0}.filt.srt.nodup.nonchrM.bam'.format(INPUT_PREFIX)
         FINAL_BED = '{0}.filt.srt.nodup.nonchrM.tn5.bed.gz'.format(INPUT_PREFIX)
+        BIGWIG = '{0}.filt.srt.nodup.nonchrM.tn5.pf.pval.signal.bigwig'.format(INPUT_PREFIX)
     else: # mode 2
         ALIGNED_BAM = args.alignedbam
         ALIGNMENT_LOG = args.alignmentlog
@@ -784,21 +917,29 @@ def parse_args():
         DUP_LOG = args.duplog
         FINAL_BAM = args.finalbam
         FINAL_BED = args.finalbed
+        BIGWIG = args.bigwig
 
-    return NAME, OUTPUT_PREFIX, REF, TSS, DNASE, BLACKLIST, PROM, ENH, \
+    return NAME, OUTPUT_PREFIX, REF, TSS, DNASE, BLACKLIST, PROM, ENH, REG2MAP, ROADMAP_META, \
            ALIGNED_BAM, ALIGNMENT_LOG, QSORT_BAM, COORDSORT_BAM, DUP_LOG, \
-           FINAL_BAM, FINAL_BED
+           FINAL_BAM, FINAL_BED, BIGWIG
 
 
 def main():
 
     # Parse args
-    [ NAME, OUTPUT_PREFIX, REF, TSS, DNASE, BLACKLIST, PROM, ENH, \
+    [ NAME, OUTPUT_PREFIX, REF, TSS, DNASE, BLACKLIST, PROM, ENH, REG2MAP, ROADMAP_META, \
       ALIGNED_BAM, ALIGNMENT_LOG, QSORT_BAM, COORDSORT_BAM, \
-      DUP_LOG, FINAL_BAM, FINAL_BED ] = parse_args()
+      DUP_LOG, FINAL_BAM, FINAL_BED, BIGWIG ] = parse_args()
 
     # Set up the log file
     logging.basicConfig(filename='test.log',level=logging.DEBUG)
+
+
+    # Compare to roadmap
+    roadmap_compare_plot = compare_to_roadmap(BIGWIG, DNASE, REG2MAP, 
+                                              ROADMAP_META, OUTPUT_PREFIX)
+    
+
 
     # Sequencing metrics: Bowtie1/2 alignment log, chrM, GC bias
     BOWTIE_STATS = get_bowtie_stats(ALIGNMENT_LOG)
@@ -811,11 +952,11 @@ def main():
     # preseq_data, preseq_log = run_preseq(justAlignedQnameSortBam, OUTPREFIX)
     preseq_log = '/srv/scratch/dskim89/tmp/ataqc/KeraFreshDay01minA_1.trim.preseq.log'
     preseq_data = '/srv/scratch/dskim89/tmp/ataqc/KeraFreshDay01minA_1.trim.preseq.dat'
-    NRF, PBC1, PBC2 = get_encode_complexity_measures(preseq_log)
+    encode_lib_metrics = get_encode_complexity_measures(preseq_log)
 
     # Filtering metrics: duplicates, map quality
-    fract_mapq = get_fract_mapq(ALIGNED_BAM)
-    percent_dup = get_picard_dup_stats(DUP_LOG)
+    num_mapq, fract_mapq = get_fract_mapq(ALIGNED_BAM)
+    read_dups, percent_dup = get_picard_dup_stats(DUP_LOG)
     flagstat = get_samtools_flagstat(ALIGNED_BAM)
 
     # Final read statistics
@@ -833,8 +974,8 @@ def main():
 
     # Signal to noise: reads in DHS regions vs not, reads falling
     # into blacklist regions
-    fract_dnase, fract_blacklist, \
-    fract_prom, fract_enh = get_signal_to_noise(FINAL_BED,
+    reads_dnase, fract_dnase, reads_blacklist, fract_blacklist, \
+    reads_prom, fract_prom, reads_enh, fract_enh = get_signal_to_noise(FINAL_BED,
                                                 DNASE,
                                                 BLACKLIST,
                                                 PROM,
@@ -842,6 +983,8 @@ def main():
 
     # Also need to run n-nucleosome estimation
     nucleosomal_qc = fragment_length_qc(read_picard_histogram(insert_data))
+
+    
 
     # Finally output the bar chart of reads
     read_count_data = [first_read_count, first_read_count*fract_mapq,
@@ -857,46 +1000,42 @@ def main():
         ('Genome', 'hg19'),
     ])
 
-    TEST_ENRICHMENT_PLOTS = {
+    FILTERING_STATS = OrderedDict([
+        ('Mapping quality > q30 (out of total)', (num_mapq, fract_mapq)),
+        ('Duplicates (after filtering)', (read_dups, percent_dup)),
+        ('Mitochondrial reads (out of total)', (chr_m_reads, fraction_chr_m)),
+        ('Final reads (after all filters)', (final_read_count, fract_reads_left)),
+    ])
+
+    ENRICHMENT_PLOTS = {
         'tss': b64encode(open(vplot_large_file, 'rb').read())
     }
 
-    FINAL_BAM_STATS = OrderedDict([
-        ('Final read count', '{:,}'.format(final_read_count)),
-        ('Fraction of reads after filtering',
-         '{0:.3f}'.format(fract_reads_left)),
-    ])
-
     ANNOT_ENRICHMENTS = OrderedDict([
-        ('Fraction of reads in universal DHS regions', fract_dnase),
-        ('Fraction of reads in blacklist regions', fract_blacklist),
-        ('Fraction of reads in promoter regions', fract_prom),
-        ('Fraction of reads in enhancer regions', fract_enh),
-    ])
-
-    LIBRARY_COMPLEXITY = OrderedDict([
-        ('NRF', NRF),
-        ('PBC1', PBC1),
-        ('PBC2', PBC2),
+        ('Fraction of reads in universal DHS regions', (reads_dnase, fract_dnase)),
+        ('Fraction of reads in blacklist regions', (reads_blacklist, fract_blacklist)),
+        ('Fraction of reads in promoter regions', (reads_prom, fract_prom)),
+        ('Fraction of reads in enhancer regions', (reads_enh, fract_enh)),
     ])
 
     SAMPLE = {
         'name': NAME,
         'basic_info': BASIC_INFO,
         'bowtie_stats': BOWTIE_STATS,
+        'filtering_stats': FILTERING_STATS,
         'fraction_chr_m': fraction_chr_m,
         'gc_bias': b64encode(plot_gc(gc_out)),
         'fract_mapq': fract_mapq,
         'percent_dup': percent_dup,
         'samtools_flagstat': flagstat,
-        'final_stats': FINAL_BAM_STATS,
         'annot_enrichments': ANNOT_ENRICHMENTS,
-        'enrichment_plots': TEST_ENRICHMENT_PLOTS,
-        'library_complexity': LIBRARY_COMPLEXITY,
+        'enrichment_plots': ENRICHMENT_PLOTS,
+        'encode_lib_complexity': encode_lib_metrics,
         'yield_prediction': b64encode(preseq_plot(preseq_data)),
         'fraglen_dist': b64encode(fragment_length_plot(insert_data)),
         'nucleosomal': nucleosomal_qc,
         'read_tracker': b64encode(read_tracker_plot),
+        'roadmap_plot': b64encode(roadmap_compare_plot),
     }
 
     results = open('test.html', 'w')
