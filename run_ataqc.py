@@ -96,6 +96,40 @@ class QCHasElementInRange(QCCheck):
 
 # QC FUNCTIONS
 
+def determine_paired(bam_file):
+    '''
+    Quick function to determine if the BAM file is paired end or single end
+    '''
+    num_paired_reads = int(subprocess.check_output(['samtools',
+                                                    'view', '-f', '0x1',
+                                                    '-c', bam_file]).strip())
+    if num_paired_reads > 1:
+        return "Paired-ended"
+    else:
+        return "Single-ended"
+
+
+def get_read_length(fastq_file):
+    '''
+    Get read length out of fastq file
+    '''
+    total_reads_to_consider = 1000000
+    line_num = 0
+    total_reads_considered = 0
+    max_length = 0
+    with open(fastq_file, 'rb') as fp:
+        for line in fp:
+            if line_num % 4 == 1:
+                if len(line.strip()) > max_length:
+                    max_length = len(line.strip())
+                total_reads_considered += 1
+            if total_reads_considered >= total_reads_to_consider:
+                break
+            line_num += 1
+
+    return int(max_length)
+
+
 def get_bowtie_stats(bowtie_alignment_log):
     '''
     From the Bowtie alignment log, get relevant stats and return
@@ -124,9 +158,6 @@ def get_chr_m(sorted_bam_file):
             chr_m_reads = int(chrom_stats[2])
         tot_reads += int(chrom_stats[2])
     fract_chr_m = float(chr_m_reads) / tot_reads
-
-    # QC check
-
 
     return chr_m_reads, fract_chr_m
 
@@ -241,6 +272,33 @@ def get_encode_complexity_measures(preseq_log):
     results.append(QCGreaterThanEqualCheck('PBC2', 1.0)(PBC2))
 
     return results
+
+
+def get_picard_complexity_metrics(aligned_bam):
+    '''
+    Picard EsimateLibraryComplexity
+    '''
+    out_file = '{0}.picardcomplexity.qc'.format(aligned_bam)
+    get_gc_metrics = ('java -Xmx4G -jar '
+                      '/software/picard-tools/1.129/picard.jar ' # environment variable $PICARD instead of hardcoding path
+                      'EstimateLibraryComplexity INPUT={0} OUTPUT={1} '
+                      'VERBOSITY=WARNING '
+                      'QUIET=TRUE').format(aligned_bam,
+                                           out_file)
+    os.system(get_gc_metrics)
+
+    # Extract the actual estimated library size
+    header_seen = False
+    with open(out_file, 'rb') as fp:
+        for line in fp:
+            if header_seen:
+                est_library_size = int(line.strip().split()[-1])
+                break
+            if 'ESTIMATED_LIBRARY_SIZE' in line:
+                header_seen = True
+
+    return est_library_size
+
 
 def preseq_plot(data_file):
     '''
@@ -446,7 +504,7 @@ def get_fract_reads_in_regions(reads_bed, regions_bed):
 
 
 def get_signal_to_noise(final_bed, dnase_regions, blacklist_regions, \
-                        prom_regions, enh_regions):
+                        prom_regions, enh_regions, peaks):
     '''
     Given region sets, determine whether reads are
     falling in or outside these regions
@@ -465,8 +523,11 @@ def get_signal_to_noise(final_bed, dnase_regions, blacklist_regions, \
     # Enh regions
     reads_enh, fract_enh = get_fract_reads_in_regions(final_bed, enh_regions)
 
+    # Peak regions
+    reads_peaks, fract_peaks = get_fract_reads_in_regions(final_bed, peaks)
+
     return reads_dnase, fract_dnase, reads_blacklist, fract_blacklist, \
-           reads_prom, fract_prom, reads_enh, fract_enh
+           reads_prom, fract_prom, reads_enh, fract_enh, reads_peaks, fract_peaks
 
 
 def track_reads(reads_list, labels):
@@ -718,7 +779,19 @@ html_template = Template("""
 Note that all these read counts are determined using 'samtools view' - as such,
 these are all reads found in the file, whether one end of a pair or a single 
 end read. In other words, if your file is paired end, then you should divide 
-these counts by two.
+these counts by two. Each step follows the previous step; for example, the 
+duplicate reads were removed after reads were removed for low mapping quality.
+</pre>
+
+  {{ inline_img(sample['read_tracker']) }}
+<pre>
+This bar chart also shows the filtering process and where the reads were lost
+over the process. Note that each step is sequential - as such, there may
+have been more mitochondrial reads which were already filtered because of
+high duplication or low mapping quality. Note that all these read counts are 
+determined using 'samtools view' - as such, these are all reads found in 
+the file, whether one end of a pair or a single end read. In other words, 
+if your file is paired end, then you should divide these counts by two.
 </pre>
 
 
@@ -767,11 +840,17 @@ in a dataset; it is the ratio between the number of positions in the genome
 that uniquely mapped reads map to and the total number of uniquely mappable 
 reads. The NRF should be > 0.8. The PBC1 is the ratio of genomic locations
 with EXACTLY one read pair over the genomic locations with AT LEAST one read 
-pair. PBC1 is the primary measure, and the PBC1 should be close to 1 (if PBC1 
-is less than 0.5, the library is poor). The PBC2 is the ratio of genomic 
-locations with EXACTLY one read pair over the genomic locations with EXACTLY 
-two read pairs. The PBC2 should be significantly greater than 1.
+pair. PBC1 is the primary measure, and the PBC1 should be close to 1. 
+Provisionally 0-0.5 is severe bottlenecking, 0.5-0.8 is moderate bottlenecking, 
+0.8-0.9 is mild bottlenecking, and 0.9-1.0 is no bottlenecking. The PBC2 is 
+the ratio of genomic locations with EXACTLY one read pair over the genomic 
+locations with EXACTLY two read pairs. The PBC2 should be significantly 
+greater than 1.
 </pre>
+
+  <h3>Picard EstimateLibraryComplexity</h3>
+  {{ '{0:,}'.format(sample['picard_est_library_size']) }}
+
 
   <h3>Yield prediction</h3>
   {{ inline_img(sample['yield_prediction']) }}
@@ -847,18 +926,6 @@ to your sample, the higher the correlation.
 </pre>
 
 
-  <h2>Read summary</h2>
-  {{ inline_img(sample['read_tracker']) }}
-<pre>
-This bar chart shows the filtering process and where the reads were lost
-over the process. Note that each step is sequential - as such, there may
-have been more mitochondrial reads which were already filtered because of
-high duplication or low mapping quality. Note that all these read counts are 
-determined using 'samtools view' - as such, these are all reads found in 
-the file, whether one end of a pair or a single end read. In other words, 
-if your file is paired end, then you should divide these counts by two.
-</pre>
-
 </body>
 
 </html>
@@ -899,6 +966,10 @@ def parse_args():
     parser.add_argument('--inprefix', help='Input file prefix')
 
     # Mode 2: Define every possible QC file
+    parser.add_argument('--fastq1', 
+                        help='First set of reads if paired end, or the single end reads')
+    parser.add_argument('--fastq2',
+                        help='Second set of reads if paired end')
     parser.add_argument('--alignedbam', help='BAM file from the aligner')
     parser.add_argument('--alignmentlog', help='Alignment log')
     parser.add_argument('--qsortedbam', help='BAM file sorted by QNAME')
@@ -909,6 +980,8 @@ def parse_args():
                         help='Final filtered alignments in BED format')
     parser.add_argument('--bigwig',
                         help='Final bigwig')
+    parser.add_argument('--peaks',
+                        help='Peak file')
 
     args = parser.parse_args()
 
@@ -931,6 +1004,7 @@ def parse_args():
     # If mode 1 - TO BE DEPRECATED. In this case, the module is run with 
     # Jin's pipeline
     if args.pipeline == 'kundajelab':
+        FASTQ = '{0}.fastq'.format(INPUT_PREFIX)
         ALIGNED_BAM = '{0}.bam'.format(INPUT_PREFIX)
         ALIGNMENT_LOG = '{0}.align.log'.format(INPUT_PREFIX)
         QSORT_BAM = '{0}.sort.bam'.format(INPUT_PREFIX)
@@ -939,7 +1013,9 @@ def parse_args():
         FINAL_BAM = '{0}.filt.srt.nodup.nonchrM.bam'.format(INPUT_PREFIX)
         FINAL_BED = '{0}.filt.srt.nodup.nonchrM.tn5.bed.gz'.format(INPUT_PREFIX)
         BIGWIG = '{0}.filt.srt.nodup.nonchrM.tn5.pf.pval.signal.bigwig'.format(INPUT_PREFIX)
+        PEAKS = '{0}.filt.srt.nodup.nonchrM.tn5.pf_peaks.narrowPeak'.format(INPUT_PREFIX)
     else: # mode 2
+        FASTQ = args.fastq1
         ALIGNED_BAM = args.alignedbam
         ALIGNMENT_LOG = args.alignmentlog
         QSORT_BAM = args.qsortedbam
@@ -948,28 +1024,29 @@ def parse_args():
         FINAL_BAM = args.finalbam
         FINAL_BED = args.finalbed
         BIGWIG = args.bigwig
+        PEAKS = args.peaks
 
     return NAME, OUTPUT_PREFIX, REF, TSS, DNASE, BLACKLIST, PROM, ENH, REG2MAP, ROADMAP_META, GENOME, \
-           ALIGNED_BAM, ALIGNMENT_LOG, QSORT_BAM, COORDSORT_BAM, DUP_LOG, \
-           FINAL_BAM, FINAL_BED, BIGWIG
+           FASTQ, ALIGNED_BAM, ALIGNMENT_LOG, QSORT_BAM, COORDSORT_BAM, DUP_LOG, \
+           FINAL_BAM, FINAL_BED, BIGWIG, PEAKS
 
 
 def main():
 
     # Parse args
     [ NAME, OUTPUT_PREFIX, REF, TSS, DNASE, BLACKLIST, PROM, ENH, REG2MAP, ROADMAP_META, GENOME, \
-      ALIGNED_BAM, ALIGNMENT_LOG, QSORT_BAM, COORDSORT_BAM, \
-      DUP_LOG, FINAL_BAM, FINAL_BED, BIGWIG ] = parse_args()
+      FASTQ, ALIGNED_BAM, ALIGNMENT_LOG, QSORT_BAM, COORDSORT_BAM, \
+      DUP_LOG, FINAL_BAM, FINAL_BED, BIGWIG, PEAKS ] = parse_args()
 
     # Set up the log file and timing
     logging.basicConfig(filename='test.log',level=logging.DEBUG)
     start = timeit.default_timer()
 
-    # Compare to roadmap
-    roadmap_compare_plot = compare_to_roadmap(BIGWIG, DNASE, REG2MAP, 
-                                              ROADMAP_META, OUTPUT_PREFIX)
-    
+    # First check if paired/single
+    paired_status = determine_paired(FINAL_BAM)
 
+    # Also get read length
+    read_len = get_read_length(FASTQ)
 
     # Sequencing metrics: Bowtie1/2 alignment log, chrM, GC bias
     BOWTIE_STATS = get_bowtie_stats(ALIGNMENT_LOG)
@@ -979,9 +1056,10 @@ def main():
                                          OUTPUT_PREFIX)
 
     # Library complexity: Preseq results, NRF, PBC1, PBC2
-    # preseq_data, preseq_log = run_preseq(justAlignedQnameSortBam, OUTPREFIX)
-    preseq_log = '/srv/scratch/dskim89/tmp/ataqc/KeraFreshDay01minA_1.trim.preseq.log'
-    preseq_data = '/srv/scratch/dskim89/tmp/ataqc/KeraFreshDay01minA_1.trim.preseq.dat'
+    picard_est_library_size = get_picard_complexity_metrics(ALIGNED_BAM)
+    preseq_data, preseq_log = run_preseq(QSORT_BAM, OUTPUT_PREFIX)
+    #preseq_log = '/srv/scratch/dskim89/tmp/ataqc/KeraFreshDay01minA_1.trim.preseq.log'
+    #preseq_data = '/srv/scratch/dskim89/tmp/ataqc/KeraFreshDay01minA_1.trim.preseq.dat'
     encode_lib_metrics = get_encode_complexity_measures(preseq_log)
 
     # Filtering metrics: duplicates, map quality
@@ -1005,16 +1083,19 @@ def main():
     # Signal to noise: reads in DHS regions vs not, reads falling
     # into blacklist regions
     reads_dnase, fract_dnase, reads_blacklist, fract_blacklist, \
-    reads_prom, fract_prom, reads_enh, fract_enh = get_signal_to_noise(FINAL_BED,
+    reads_prom, fract_prom, reads_enh, fract_enh, reads_peaks, fract_peaks = get_signal_to_noise(FINAL_BED,
                                                 DNASE,
                                                 BLACKLIST,
                                                 PROM,
-                                                ENH)
+                                                ENH,
+                                                PEAKS)
 
     # Also need to run n-nucleosome estimation
     nucleosomal_qc = fragment_length_qc(read_picard_histogram(insert_data))
 
-    
+    # Compare to roadmap
+    roadmap_compare_plot = compare_to_roadmap(BIGWIG, DNASE, REG2MAP, 
+                                              ROADMAP_META, OUTPUT_PREFIX)
 
     # Finally output the bar chart of reads
     read_count_data = [first_read_count, first_read_count*fract_mapq,
@@ -1028,6 +1109,8 @@ def main():
     BASIC_INFO = OrderedDict([
         ('Sample', NAME),
         ('Genome', GENOME),
+        ('Paired/Single-ended', paired_status),
+        ('Read length', read_len),
     ])
 
     SUMMARY_STATS = OrderedDict([
@@ -1053,6 +1136,7 @@ def main():
         ('Fraction of reads in blacklist regions', (reads_blacklist, fract_blacklist)),
         ('Fraction of reads in promoter regions', (reads_prom, fract_prom)),
         ('Fraction of reads in enhancer regions', (reads_enh, fract_enh)),
+        ('Fraction of reads in called peak regions', (reads_peaks, fract_peaks)),
     ])
 
     SAMPLE = {
@@ -1063,6 +1147,7 @@ def main():
         'filtering_stats': FILTERING_STATS,
         'fraction_chr_m': fraction_chr_m,
         'gc_bias': b64encode(plot_gc(gc_out)),
+        'picard_est_library_size': picard_est_library_size,
         'fract_mapq': fract_mapq,
         'percent_dup': percent_dup,
         'samtools_flagstat': flagstat,
@@ -1079,6 +1164,10 @@ def main():
     results = open('test.html', 'w')
     results.write(html_template.render(sample=SAMPLE))
     results.close()
+
+    # Also produce a text file of relevant stats (so that another module
+    # can combine the stats)
+    
 
     stop = timeit.default_timer()
     print "Run time:", str(datetime.timedelta(seconds=int(stop - start)))
