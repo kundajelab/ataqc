@@ -1106,7 +1106,7 @@ def main():
 
 
     # Take all this info and render the html file
-    BASIC_INFO = OrderedDict([
+    SAMPLE_INFO = OrderedDict([
         ('Sample', NAME),
         ('Genome', GENOME),
         ('Paired/Single-ended', paired_status),
@@ -1139,34 +1139,49 @@ def main():
         ('Fraction of reads in called peak regions', (reads_peaks, fract_peaks)),
     ])
 
-    SAMPLE = {
-        'name': NAME,
-        'basic_info': BASIC_INFO,
-        'summary_stats': SUMMARY_STATS,
-        'bowtie_stats': BOWTIE_STATS,
-        'filtering_stats': FILTERING_STATS,
-        'fraction_chr_m': fraction_chr_m,
-        'gc_bias': b64encode(plot_gc(gc_out)),
-        'picard_est_library_size': picard_est_library_size,
-        'fract_mapq': fract_mapq,
-        'percent_dup': percent_dup,
-        'samtools_flagstat': flagstat,
-        'annot_enrichments': ANNOT_ENRICHMENTS,
-        'enrichment_plots': ENRICHMENT_PLOTS,
-        'encode_lib_complexity': encode_lib_metrics,
-        'yield_prediction': b64encode(preseq_plot(preseq_data)),
-        'fraglen_dist': b64encode(fragment_length_plot(insert_data)),
-        'nucleosomal': nucleosomal_qc,
-        'read_tracker': b64encode(read_tracker_plot),
-        'roadmap_plot': b64encode(roadmap_compare_plot),
-    }
+    SAMPLE = OrderedDict([
+        ('name', NAME),
+        ('basic_info', SAMPLE_INFO),
 
-    results = open('test.html', 'w')
+        # Summary
+        ('summary_stats', SUMMARY_STATS),
+        ('read_tracker', b64encode(read_tracker_plot)),
+
+        # Alignment statistics
+        ('bowtie_stats', BOWTIE_STATS),
+        ('samtools_flagstat', flagstat),
+
+        # Filtering statistics
+        ('filtering_stats', FILTERING_STATS),
+
+        # Library complexity statistics
+        ('encode_lib_complexity', encode_lib_metrics),
+        ('picard_est_library_size', picard_est_library_size),
+        ('yield_prediction', b64encode(preseq_plot(preseq_data))),
+
+        # Fragment length statistics
+        ('fraglen_dist', b64encode(fragment_length_plot(insert_data))),
+        ('nucleosomal', nucleosomal_qc),
+
+        # GC
+        ('gc_bias', b64encode(plot_gc(gc_out))),
+        
+        # Annotation based statistics
+        ('enrichment_plots', ENRICHMENT_PLOTS),
+        ('annot_enrichments', ANNOT_ENRICHMENTS),
+        
+        # Roadmap plot
+        ('roadmap_plot', b64encode(roadmap_compare_plot)),
+    ])
+
+    results = open('{0}_qc.html'.format(NAME), 'w')
     results.write(html_template.render(sample=SAMPLE))
     results.close()
 
     # Also produce a text file of relevant stats (so that another module
-    # can combine the stats)
+    # can combine the stats) and put in using ordered dictionary
+#    textfile = open('{0}_qc.txt'.format(NAME), 'w')
+
     
 
     stop = timeit.default_timer()
