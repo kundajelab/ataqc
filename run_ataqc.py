@@ -1,5 +1,5 @@
 # Daniel Kim, CS Foo
-# 2015-12-14
+# 2016-02-17
 # Script to run ataqc, all parts
 
 import matplotlib
@@ -14,6 +14,7 @@ import subprocess
 import multiprocessing
 import timeit
 import datetime
+import gzip
 import numpy as np
 import pandas as pd
 import scipy.stats
@@ -117,7 +118,7 @@ def get_read_length(fastq_file):
     line_num = 0
     total_reads_considered = 0
     max_length = 0
-    with open(fastq_file, 'rb') as fp:
+    with gzip.open(fastq_file, 'rb') as fp:
         for line in fp:
             if line_num % 4 == 1:
                 if len(line.strip()) > max_length:
@@ -176,6 +177,7 @@ def get_gc(qsorted_bam_file, reference_fasta, prefix):
                       '/software/picard-tools/1.129/picard.jar ' # environment variable $PICARD instead of hardcoding path
                       'CollectGcBiasMetrics R={0} I={1} O={2} '
                       'VERBOSITY=WARNING QUIET=TRUE '
+                      'ASSUME_SORTED=FALSE '
                       'CHART={3} S={4}').format(reference_fasta,
                                                 qsorted_bam_file,
                                                 output_file,
@@ -231,16 +233,20 @@ def plot_gc(data_file):
     return plot_img.getvalue()
 
 
-def run_preseq(sorted_dups_bam, prefix):
+def run_preseq(bam_w_dups, prefix):
     '''
     Runs preseq. Look at preseq data output to get PBC/NRF.
     '''
+    # First sort because this file no longer exists...
+    sort_bam = 'samtools sort -o {1}.sorted.bam -T {1} -@ 2 {0}'.format(bam_w_dups, prefix)
+    os.system(sort_bam)
+
     logging.info('Running preseq...')
     preseq_data = '{0}.preseq.dat'.format(prefix)
     preseq_log = '{0}.preseq.log'.format(prefix)
     preseq = ('preseq lc_extrap '
-              '-P -B -o {0} {1} -v 2> {2}').format(preseq_data,
-                                                   sorted_dups_bam,
+              '-P -B -o {0} {1}.sorted.bam -v 2> {2}').format(preseq_data,
+                                                   prefix,
                                                    preseq_log)
     logging.info(preseq)
     os.system(preseq)
@@ -274,11 +280,11 @@ def get_encode_complexity_measures(preseq_log):
     return results
 
 
-def get_picard_complexity_metrics(aligned_bam):
+def get_picard_complexity_metrics(aligned_bam, prefix):
     '''
     Picard EsimateLibraryComplexity
     '''
-    out_file = '{0}.picardcomplexity.qc'.format(aligned_bam)
+    out_file = '{0}.picardcomplexity.qc'.format(prefix)
     get_gc_metrics = ('java -Xmx4G -jar '
                       '/software/picard-tools/1.129/picard.jar ' # environment variable $PICARD instead of hardcoding path
                       'EstimateLibraryComplexity INPUT={0} OUTPUT={1} '
@@ -368,6 +374,8 @@ def make_vplot(bam_file, tss, prefix, bins=400, bp_edge=2000, processes=8,
     ax.plot(x, bam_array.mean(axis=0), color='r', label='Mean')
     ax.axvline(0, linestyle=':', color='k')
 
+    tss_point_val = max(bam_array.mean(axis=0))
+
     ax.set_xlabel('Distance from TSS (bp)')
     ax.set_ylabel('Average read coverage (per million mapped reads)')
     ax.legend(loc='best')
@@ -388,7 +396,9 @@ def make_vplot(bam_file, tss, prefix, bins=400, bp_edge=2000, processes=8,
     # And save the file
     fig.savefig(vplot_large_file)
 
-    return vplot_file, vplot_large_file
+    # Note the middle high point (TSS)
+
+    return vplot_file, vplot_large_file, tss_point_val
 
 
 def get_picard_dup_stats(picard_dup_file):
@@ -427,7 +437,9 @@ def get_samtools_flagstat(bam_file):
     for line in results:
         logging.info(line.strip())
         flagstat += line
-    return flagstat
+        if "mapped" in line and "mate" not in line:
+            mapped_reads = int(line.split('+')[0].strip())
+    return flagstat, mapped_reads
 
 
 def get_fract_mapq(bam_file, q=30):
@@ -972,7 +984,6 @@ def parse_args():
                         help='Second set of reads if paired end')
     parser.add_argument('--alignedbam', help='BAM file from the aligner')
     parser.add_argument('--alignmentlog', help='Alignment log')
-    parser.add_argument('--qsortedbam', help='BAM file sorted by QNAME')
     parser.add_argument('--coordsortbam', help='BAM file sorted by coordinate')
     parser.add_argument('--duplog', help='Picard duplicate metrics file')
     parser.add_argument('--finalbam', help='Final filtered BAM file')
@@ -988,6 +999,7 @@ def parse_args():
     # Set up all variables
     INPUT_PREFIX = os.path.join(args.workdir, args.inprefix)
     OUTPUT_PREFIX = os.path.join(args.outdir, args.outprefix)
+    os.system('mkdir {0}'.format(args.outdir))
     NAME = args.outprefix
 
     # Set up annotations
@@ -1004,21 +1016,19 @@ def parse_args():
     # If mode 1 - TO BE DEPRECATED. In this case, the module is run with 
     # Jin's pipeline
     if args.pipeline == 'kundajelab':
-        FASTQ = '{0}.fastq'.format(INPUT_PREFIX)
+        FASTQ = args.fastq1
         ALIGNED_BAM = '{0}.bam'.format(INPUT_PREFIX)
         ALIGNMENT_LOG = '{0}.align.log'.format(INPUT_PREFIX)
-        QSORT_BAM = '{0}.sort.bam'.format(INPUT_PREFIX)
-        COORDSORT_BAM = '{0}.filt.srt.nodup.bam'.format(INPUT_PREFIX)
-        DUP_LOG = '{0}.filt.srt.dup.qc'.format(INPUT_PREFIX)
-        FINAL_BAM = '{0}.filt.srt.nodup.nonchrM.bam'.format(INPUT_PREFIX)
-        FINAL_BED = '{0}.filt.srt.nodup.nonchrM.tn5.bed.gz'.format(INPUT_PREFIX)
-        BIGWIG = '{0}.filt.srt.nodup.nonchrM.tn5.pf.pval.signal.bigwig'.format(INPUT_PREFIX)
-        PEAKS = '{0}.filt.srt.nodup.nonchrM.tn5.pf_peaks.narrowPeak'.format(INPUT_PREFIX)
+        COORDSORT_BAM = '{0}.nodup.bam'.format(INPUT_PREFIX)
+        DUP_LOG = '{0}.dup.qc'.format(INPUT_PREFIX)
+        FINAL_BAM = '{0}.nodup.nonchrM.bam'.format(INPUT_PREFIX)
+        FINAL_BED = '{0}.nodup.nonchrM.tn5.bed.gz'.format(INPUT_PREFIX)
+        BIGWIG = '{0}.nodup.nonchrM.tn5.pf.pval.signal.bigwig'.format(INPUT_PREFIX)
+        PEAKS = '{0}.nodup.nonchrM.tn5.pf_peaks.narrowPeak'.format(INPUT_PREFIX)
     else: # mode 2
         FASTQ = args.fastq1
         ALIGNED_BAM = args.alignedbam
         ALIGNMENT_LOG = args.alignmentlog
-        QSORT_BAM = args.qsortedbam
         COORDSORT_BAM = args.coordsortbam
         DUP_LOG = args.duplog
         FINAL_BAM = args.finalbam
@@ -1027,7 +1037,7 @@ def parse_args():
         PEAKS = args.peaks
 
     return NAME, OUTPUT_PREFIX, REF, TSS, DNASE, BLACKLIST, PROM, ENH, REG2MAP, ROADMAP_META, GENOME, \
-           FASTQ, ALIGNED_BAM, ALIGNMENT_LOG, QSORT_BAM, COORDSORT_BAM, DUP_LOG, \
+           FASTQ, ALIGNED_BAM, ALIGNMENT_LOG, COORDSORT_BAM, DUP_LOG, \
            FINAL_BAM, FINAL_BED, BIGWIG, PEAKS
 
 
@@ -1035,7 +1045,7 @@ def main():
 
     # Parse args
     [ NAME, OUTPUT_PREFIX, REF, TSS, DNASE, BLACKLIST, PROM, ENH, REG2MAP, ROADMAP_META, GENOME, \
-      FASTQ, ALIGNED_BAM, ALIGNMENT_LOG, QSORT_BAM, COORDSORT_BAM, \
+      FASTQ, ALIGNED_BAM, ALIGNMENT_LOG, COORDSORT_BAM, \
       DUP_LOG, FINAL_BAM, FINAL_BED, BIGWIG, PEAKS ] = parse_args()
 
     # Set up the log file and timing
@@ -1050,14 +1060,14 @@ def main():
 
     # Sequencing metrics: Bowtie1/2 alignment log, chrM, GC bias
     BOWTIE_STATS = get_bowtie_stats(ALIGNMENT_LOG)
-    chr_m_reads, fraction_chr_m = get_chr_m(QSORT_BAM)
+    chr_m_reads, fraction_chr_m = get_chr_m(COORDSORT_BAM)
     gc_out, gc_plot, gc_summary = get_gc(COORDSORT_BAM,
                                          REF,
-                                         OUTPUT_PREFIX)
+                                         output_prefixIX)
 
     # Library complexity: Preseq results, NRF, PBC1, PBC2
-    picard_est_library_size = get_picard_complexity_metrics(ALIGNED_BAM)
-    preseq_data, preseq_log = run_preseq(QSORT_BAM, OUTPUT_PREFIX)
+    picard_est_library_size = get_picard_complexity_metrics(ALIGNED_BAM, OUTPUT_PREFIX)
+    preseq_data, preseq_log = run_preseq(ALIGNED_BAM, OUTPUT_PREFIX)
     #preseq_log = '/srv/scratch/dskim89/tmp/ataqc/KeraFreshDay01minA_1.trim.preseq.log'
     #preseq_data = '/srv/scratch/dskim89/tmp/ataqc/KeraFreshDay01minA_1.trim.preseq.dat'
     encode_lib_metrics = get_encode_complexity_measures(preseq_log)
@@ -1065,7 +1075,7 @@ def main():
     # Filtering metrics: duplicates, map quality
     num_mapq, fract_mapq = get_fract_mapq(ALIGNED_BAM)
     read_dups, percent_dup = get_picard_dup_stats(DUP_LOG)
-    flagstat = get_samtools_flagstat(ALIGNED_BAM)
+    [flagstat, mapped_count] = get_samtools_flagstat(ALIGNED_BAM)
 
     # Final read statistics
     first_read_count, final_read_count, \
@@ -1077,7 +1087,7 @@ def main():
                                                        OUTPUT_PREFIX)
 
     # Enrichments: V plot for enrichment
-    vplot_file, vplot_large_file = make_vplot(COORDSORT_BAM,
+    vplot_file, vplot_large_file, tss_point_val = make_vplot(COORDSORT_BAM,
                                               TSS, OUTPUT_PREFIX)
 
     # Signal to noise: reads in DHS regions vs not, reads falling
@@ -1114,7 +1124,8 @@ def main():
     ])
 
     SUMMARY_STATS = OrderedDict([
-        ('Read count successfully aligned', first_read_count),
+        ('Read count from sequencer', first_read_count),
+        ('Read count successfully aligned', mapped_count),
         ('Read count after filtering for mapping quality', num_mapq),
         ('Read count after removing duplicate reads', int(num_mapq - read_dups)),
         ('Read count after removing mitochondrial reads (final read count)', final_read_count),
@@ -1140,7 +1151,7 @@ def main():
     ])
 
     SAMPLE = OrderedDict([
-        ('name', NAME),
+        ('Name', NAME),
         ('basic_info', SAMPLE_INFO),
 
         # Summary
@@ -1168,6 +1179,7 @@ def main():
         
         # Annotation based statistics
         ('enrichment_plots', ENRICHMENT_PLOTS),
+        ('TSS_enrichment', tss_point_val),
         ('annot_enrichments', ANNOT_ENRICHMENTS),
         
         # Roadmap plot
@@ -1180,9 +1192,31 @@ def main():
 
     # Also produce a text file of relevant stats (so that another module
     # can combine the stats) and put in using ordered dictionary
-#    textfile = open('{0}_qc.txt'.format(NAME), 'w')
+    textfile = open('{0}_qc.txt'.format(NAME), 'w')
+    for key, value in SAMPLE.iteritems():
+        if isinstance(value, str) and (len(value) < 300): # Make sure to not get b64encode
+            textfile.write('{0}\t{1}\n'.format(key, value))
+        elif isinstance(value, int): # Make sure to not get b64encode
+            textfile.write('{0}\t{1}\n'.format(key, value))
+        elif isinstance(value, float): # Make sure to not get b64encode
+            textfile.write('{0}\t{1}\n'.format(key, value))
+        elif isinstance(value, OrderedDict):
+            for dict_key, dict_value in value.iteritems():
+                if isinstance(dict_value, tuple):
+                    textfile.write('{0}'.format(dict_key))
+                    for tuple_val in dict_value:
+                        textfile.write('\t{0}'.format(tuple_val))
+                    textfile.write('\n')
+                else:
+                    textfile.write('{0}\t{1}\n'.format(dict_key, dict_value))
+        # QC tables go here
+        elif isinstance(value, list):
+            for result in value:
+                textfile.write('{0}\t{1}\n'.format(result.metric, result.message))
+        else:
+            pass
+    textfile.close()
 
-    
 
     stop = timeit.default_timer()
     print "Run time:", str(datetime.timedelta(seconds=int(stop - start)))
@@ -1190,3 +1224,6 @@ def main():
     return None
 
 main()
+
+
+# bash run_ataqc.sh ../processed/Day00-D1-FrozenKera-1A/ ./Day00-D1-FrozenKera-1A Day00-D1-FrozenKera-1A Day00-D1-FrozenKera-1A_S1_L001_R1_001.trim.PE2SE ../raw/Day00-D1-FrozenKera-1A_S1_L001_R1_001.trim.fastq.gz
