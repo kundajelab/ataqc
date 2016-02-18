@@ -44,8 +44,8 @@ python ~/git/ataqc/run_ataqc.py \
     --alignedbam $7 \
     --alignmentlog $8 \
     --coordsortbam $9 \
-    --duplog $10 \
-    --finalbam $11 \
-    --finalbed $12 \
-    --bigwig $13 \
-    --peaks $14
+    --duplog ${10} \
+    --finalbam ${11} \
+    --finalbed ${12} \
+    --bigwig ${13} \
+    --peaks ${14}

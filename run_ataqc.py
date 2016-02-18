@@ -1021,7 +1021,7 @@ def parse_args():
             INPUT_PREFIX)
         PEAKS = '{0}.nodup.nonchrM.tn5.pf_peaks.narrowPeak'.format(
             INPUT_PREFIX)
-    else: # mode 2
+    else: # mode 2  
         FASTQ = args.fastq1
         ALIGNED_BAM = args.alignedbam
         ALIGNMENT_LOG = args.alignmentlog
@@ -1059,7 +1059,7 @@ def main():
     chr_m_reads, fraction_chr_m = get_chr_m(COORDSORT_BAM)
     gc_out, gc_plot, gc_summary = get_gc(COORDSORT_BAM,
                                          REF,
-                                         output_prefixIX)
+                                         OUTPUT_PREFIX)
 
     # Library complexity: Preseq results, NRF, PBC1, PBC2
     picard_est_library_size = get_picard_complexity_metrics(ALIGNED_BAM, 
