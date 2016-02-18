@@ -1,9 +1,12 @@
 #!/bin/bash -l
 
-# This script is an example test of the ataqc package
+# Example script with all arguments defined to run in BDS
 
 # Don't forget to run `export -f module` first
 module add bedtools java picard-tools preseq python_anaconda r samtools ucsc_tools
+
+# Be sure that environmental variables are set. For example, $PICARD should
+# point to the directory with the picard.jar file.
 
 # Directories and prefixes
 WORKDIR=$1
@@ -24,18 +27,25 @@ REG2MAP="${ANNOTDIR}/${GENOME}/dnase_avgs_reg2map_p10_merged_named.pvals.gz"
 ROADMAP_META="${ANNOTDIR}/${GENOME}/eid_to_mnemonic.txt"
 
 python ~/git/ataqc/run_ataqc.py \
-                    --workdir $WORKDIR \
-                    --outdir $OUTDIR \
-                    --outprefix $OUTPREFIX \
-                    --genome $GENOME \
-                    --ref $REF_FASTA \
-                    --tss $TSS_BED \
-                    --dnase $DNASE_BED \
-                    --blacklist $BLACKLIST_BED \
-                    --prom $PROM \
-                    --enh $ENH \
-                    --reg2map $REG2MAP \
-                    --meta $ROADMAP_META \
-                    --pipeline kundajelab \
-                    --inprefix $INPREFIX \
-                    --fastq1 $5
+    --workdir $WORKDIR \
+    --outdir $OUTDIR \
+    --outprefix $OUTPREFIX \
+    --genome $GENOME \
+    --ref $REF_FASTA \
+    --tss $TSS_BED \
+    --dnase $DNASE_BED \
+    --blacklist $BLACKLIST_BED \
+    --prom $PROM \
+    --enh $ENH \
+    --reg2map $REG2MAP \
+    --meta $ROADMAP_META \
+    --fastq1 $5 \
+    --fastq2 $6 \
+    --alignedbam $7 \
+    --alignmentlog $8 \
+    --coordsortbam $9 \
+    --duplog $10 \
+    --finalbam $11 \
+    --finalbed $12 \
+    --bigwig $13 \
+    --peaks $14
