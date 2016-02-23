@@ -249,6 +249,7 @@ def run_preseq(bam_w_dups, prefix):
                                                    preseq_log)
     logging.info(preseq)
     os.system(preseq)
+    os.system('rm {0}.sorted.bam'.format(prefix))
     return preseq_data, preseq_log
 
 def get_encode_complexity_measures(preseq_log):
@@ -309,7 +310,10 @@ def preseq_plot(data_file):
     '''
     Generate a preseq plot
     '''
-    data = np.loadtxt(data_file, skiprows=1)
+    try:
+        data = np.loadtxt(data_file, skiprows=1)
+    except IOError:
+        return 1
     data /= 1e6  # scale to millions of reads
 
     fig = plt.figure()
@@ -856,7 +860,11 @@ greater than 1.
 
 
   <h3>Yield prediction</h3>
-  {{ inline_img(sample['yield_prediction']) }}
+  {% if sample['yield_prediction'] == 0 %}
+    {{ 'Preseq did not converge'}}
+  {% else %}
+    {{ inline_img(sample['yield_prediction']) }}
+  {% endif %}
 <pre>
 Preseq performs a yield prediction by subsampling the reads, calculating the
 number of distinct reads, and then extrapolating out to see where the 
@@ -1189,13 +1197,13 @@ def main():
         ('roadmap_plot', b64encode(roadmap_compare_plot)),
     ])
 
-    results = open('{0}_qc.html'.format(NAME), 'w')
+    results = open('{0}_qc.html'.format(OUTPUT_PREFIX), 'w')
     results.write(html_template.render(sample=SAMPLE))
     results.close()
 
     # Also produce a text file of relevant stats (so that another module
     # can combine the stats) and put in using ordered dictionary
-    textfile = open('{0}_qc.txt'.format(NAME), 'w')
+    textfile = open('{0}_qc.txt'.format(OUTPUT_PREFIX), 'w')
     for key, value in SAMPLE.iteritems():
         # Make sure to not get b64encode
         if isinstance(value, str) and (len(value) < 300): 
