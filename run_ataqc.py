@@ -313,7 +313,7 @@ def preseq_plot(data_file):
     try:
         data = np.loadtxt(data_file, skiprows=1)
     except IOError:
-        return 1
+        return 'None'
     data /= 1e6  # scale to millions of reads
 
     fig = plt.figure()
@@ -860,8 +860,8 @@ greater than 1.
 
 
   <h3>Yield prediction</h3>
-  {% if sample['yield_prediction'] == 0 %}
-    {{ 'Preseq did not converge'}}
+  {% if sample['yield_prediction'] == 'Tm9uZQ==' %}
+    {{ 'Preseq did not converge (or failed in some other way)'}}
   {% else %}
     {{ inline_img(sample['yield_prediction']) }}
   {% endif %}
