@@ -3,8 +3,6 @@
 # Script to run ataqc, all parts
 
 import matplotlib
-matplotlib.use('Agg')
-
 import os
 import sys
 import pysam
@@ -18,8 +16,6 @@ import gzip
 import numpy as np
 import pandas as pd
 import scipy.stats
-from matplotlib import pyplot as plt
-
 import argparse
 import logging
 
@@ -27,12 +23,12 @@ from base64 import b64encode
 from collections import namedtuple
 from collections import OrderedDict
 from io import BytesIO
-
 from scipy.signal import find_peaks_cwt
-
 from jinja2 import Template
+from matplotlib import pyplot as plt
+matplotlib.use('Agg')
 
-### QC STUFF
+# QC STUFF
 
 QCResult = namedtuple('QCResult', ['metric', 'qc_pass', 'message'])
 INF = float("inf")
@@ -174,7 +170,7 @@ def get_gc(qsorted_bam_file, reference_fasta, prefix):
     plot_file = '{0}_gcPlot.pdf'.format(prefix)
     summary_file = '{0}_gcSummary.txt'.format(prefix)
     get_gc_metrics = ('java -Xmx4G -jar '
-                      '$PICARD/picard.jar ' 
+                      '${PICARDROOT}/picard.jar '
                       'CollectGcBiasMetrics R={0} I={1} O={2} '
                       'VERBOSITY=WARNING QUIET=TRUE '
                       'ASSUME_SORTED=FALSE '
@@ -205,7 +201,6 @@ def plot_gc(data_file):
 
     plt.xlim((0, 100))
 
-
     lin1 = ax.plot(data[:, 0], data[:, 4],
                    label='Normalized coverage', color='r')
     ax.set_ylabel('Normalized coverage')
@@ -215,9 +210,8 @@ def plot_gc(data_file):
                     label='Mean base quality at GC%', color='b')
     ax2.set_ylabel('Mean base quality at GC%')
 
-
     ax3 = ax.twinx()
-    lin3 = ax3.plot(data[:, 0], data[:, 1]/np.sum(data[:,1]),
+    lin3 = ax3.plot(data[:, 0], data[:, 1]/np.sum(data[:, 1]),
                     label='Windows at GC%', color='g')
     ax3.get_yaxis().set_visible(False)
 
@@ -245,12 +239,13 @@ def run_preseq(bam_w_dups, prefix):
     preseq_log = '{0}.preseq.log'.format(prefix)
     preseq = ('preseq lc_extrap '
               '-P -B -o {0} {1}.sorted.bam -v 2> {2}').format(preseq_data,
-                                                   prefix,
-                                                   preseq_log)
+                                                              prefix,
+                                                              preseq_log)
     logging.info(preseq)
     os.system(preseq)
     os.system('rm {0}.sorted.bam'.format(prefix))
     return preseq_data, preseq_log
+
 
 def get_encode_complexity_measures(preseq_log):
     '''
@@ -260,7 +255,7 @@ def get_encode_complexity_measures(preseq_log):
         for line in fp:
             if line.startswith('TOTAL READS'):
                 tot_reads = float(line.strip().split("= ")[1])
-            elif  line.startswith('DISTINCT READS'):
+            elif line.startswith('DISTINCT READS'):
                 distinct_reads = float(line.strip().split('= ')[1])
             elif line.startswith('1\t'):
                 one_pair = float(line.strip().split()[1])
@@ -390,10 +385,10 @@ def make_vplot(bam_file, tss, prefix, bins=400, bp_edge=2000, processes=8,
     plt.rcParams['font.size'] = 8
     fig = metaseq.plotutils.imshow(bam_array,
                                    x=x,
-                                   figsize=(5,10),
+                                   figsize=(5, 10),
                                    vmin=5, vmax=99, percentile=True,
                                    line_kwargs=dict(color='k', label='All'),
-                                   fill_kwargs=dict(color='k',alpha=0.3),
+                                   fill_kwargs=dict(color='k', alpha=0.3),
                                    sort_by=bam_array.mean(axis=1))
 
     # And save the file
@@ -468,12 +463,12 @@ def get_final_read_count(first_bam, last_bam):
     '''
     logging.info('final read counts...')
     # Bug in pysam.view
-    num_reads_last_bam  = int(subprocess.check_output(['samtools',
+    num_reads_last_bam = int(subprocess.check_output(['samtools',
+                                                      'view', '-c',
+                                                      last_bam]).strip())
+    num_reads_first_bam = int(subprocess.check_output(['samtools',
                                                        'view', '-c',
-                                                       last_bam]).strip())
-    num_reads_first_bam  = int(subprocess.check_output(['samtools',
-                                                        'view', '-c',
-                                                        first_bam]).strip())
+                                                       first_bam]).strip())
     fract_reads_left = float(num_reads_last_bam)/num_reads_first_bam
 
     return num_reads_first_bam, num_reads_last_bam, fract_reads_left
@@ -498,6 +493,7 @@ def get_insert_distribution(final_bam, prefix):
     os.system(graph_insert_dist)
     return insert_data, insert_plot
 
+
 def get_fract_reads_in_regions(reads_bed, regions_bed):
     '''
     Function that takes in bed file of reads and bed file of regions and
@@ -516,7 +512,7 @@ def get_fract_reads_in_regions(reads_bed, regions_bed):
     return read_count, fract_reads
 
 
-def get_signal_to_noise(final_bed, dnase_regions, blacklist_regions, \
+def get_signal_to_noise(final_bed, dnase_regions, blacklist_regions,
                         prom_regions, enh_regions, peaks):
     '''
     Given region sets, determine whether reads are
@@ -525,15 +521,17 @@ def get_signal_to_noise(final_bed, dnase_regions, blacklist_regions, \
     logging.info('signal to noise...')
 
     # Dnase regions
-    reads_dnase, fract_dnase = get_fract_reads_in_regions(final_bed, 
+    reads_dnase, fract_dnase = get_fract_reads_in_regions(final_bed,
                                                           dnase_regions)
 
     # Blacklist regions
-    reads_blacklist, fract_blacklist = get_fract_reads_in_regions(final_bed, 
-        blacklist_regions)
+    reads_blacklist, \
+        fract_blacklist = get_fract_reads_in_regions(final_bed,
+                                                     blacklist_regions)
 
     # Prom regions
-    reads_prom, fract_prom = get_fract_reads_in_regions(final_bed, prom_regions)
+    reads_prom, fract_prom = get_fract_reads_in_regions(final_bed,
+                                                        prom_regions)
 
     # Enh regions
     reads_enh, fract_enh = get_fract_reads_in_regions(final_bed, enh_regions)
@@ -542,8 +540,8 @@ def get_signal_to_noise(final_bed, dnase_regions, blacklist_regions, \
     reads_peaks, fract_peaks = get_fract_reads_in_regions(final_bed, peaks)
 
     return reads_dnase, fract_dnase, reads_blacklist, fract_blacklist, \
-           reads_prom, fract_prom, reads_enh, fract_enh, reads_peaks, \
-           fract_peaks
+        reads_prom, fract_prom, reads_enh, fract_enh, reads_peaks, \
+        fract_peaks
 
 
 def track_reads(reads_list, labels):
@@ -625,11 +623,12 @@ def fragment_length_plot(data_file, peaks=None):
 
     return plot_img.getvalue()
 
-def compare_to_roadmap(bw_file, regions_file, reg2map_file, 
+
+def compare_to_roadmap(bw_file, regions_file, reg2map_file,
                        metadata, output_prefix):
     '''
     Takes a bigwig file and signal file, gets the bwAverageOverBed,
-    then compares that signal with the signal in the Roadmap 
+    then compares that signal with the signal in the Roadmap
     regions
     '''
 
@@ -644,19 +643,18 @@ def compare_to_roadmap(bw_file, regions_file, reg2map_file,
 
     # Read the file back in
     sample_data = pd.read_table(out_file, header=None)
-    sample_mean0_col = np.array(sample_data.iloc[:,5])
+    sample_mean0_col = np.array(sample_data.iloc[:, 5])
 
     # Then, calculate correlations with all other Roadmap samples and rank
     # the correlations
     roadmap_signals = pd.read_table(reg2map_file, compression='gzip')
     (nrow, ncol) = roadmap_signals.shape
 
-
     results = pd.DataFrame(columns=('eid', 'corr'))
     for i in range(ncol):
         # Slice, run correlation
-        roadmap_i = roadmap_signals.iloc[:,i]
-        spearman_corr = scipy.stats.spearmanr(np.array(roadmap_i), 
+        roadmap_i = roadmap_signals.iloc[:, i]
+        spearman_corr = scipy.stats.spearmanr(np.array(roadmap_i),
                                               sample_mean0_col)
         results.loc[i] = [roadmap_i.name, spearman_corr[0]]
         logging.info('{0}\t{1}'.format(roadmap_i.name, spearman_corr))
@@ -683,7 +681,7 @@ def compare_to_roadmap(bw_file, regions_file, reg2map_file,
     ax.spines['top'].set_visible(False)
 
     plot_img = BytesIO()
-    fig.savefig(plot_img, format='png', bbox_inches='tight')    
+    fig.savefig(plot_img, format='png', bbox_inches='tight')
     fig.savefig('test.png', format='png', bbox_inches='tight')
 
     return plot_img.getvalue()
@@ -784,9 +782,9 @@ html_template = Template("""
   </table>
 <pre>
 Note that all these read counts are determined using 'samtools view' - as such,
-these are all reads found in the file, whether one end of a pair or a single 
-end read. In other words, if your file is paired end, then you should divide 
-these counts by two. Each step follows the previous step; for example, the 
+these are all reads found in the file, whether one end of a pair or a single
+end read. In other words, if your file is paired end, then you should divide
+these counts by two. Each step follows the previous step; for example, the
 duplicate reads were removed after reads were removed for low mapping quality.
 </pre>
 
@@ -795,9 +793,9 @@ duplicate reads were removed after reads were removed for low mapping quality.
 This bar chart also shows the filtering process and where the reads were lost
 over the process. Note that each step is sequential - as such, there may
 have been more mitochondrial reads which were already filtered because of
-high duplication or low mapping quality. Note that all these read counts are 
-determined using 'samtools view' - as such, these are all reads found in 
-the file, whether one end of a pair or a single end read. In other words, 
+high duplication or low mapping quality. Note that all these read counts are
+determined using 'samtools view' - as such, these are all reads found in
+the file, whether one end of a pair or a single end read. In other words,
 if your file is paired end, then you should divide these counts by two.
 </pre>
 
@@ -827,10 +825,10 @@ if your file is paired end, then you should divide these counts by two.
     </tbody>
   </table>
   <pre>
-Mapping quality refers to the quality of the read being aligned to that 
-particular location in the genome. A standard quality score is > 30. 
+Mapping quality refers to the quality of the read being aligned to that
+particular location in the genome. A standard quality score is > 30.
 Duplications are often due to PCR duplication rather than two unique reads
-mapping to the same location. High duplication is an indication of poor 
+mapping to the same location. High duplication is an indication of poor
 libraries. Mitochondrial reads are often high in chromatin accessibility
 assays because the mitochondrial genome is very open. A high mitochondrial
 fraction is an indication of poor libraries. Based on prior experience, a
@@ -842,16 +840,16 @@ final read fraction above 0.70 is a good library.
   <h3>ENCODE library complexity metrics</h3>
   {{ qc_table(sample['encode_lib_complexity']) }}
 <pre>
-The non-redundant fraction (NRF) is the fraction of non-redundant mapped reads 
-in a dataset; it is the ratio between the number of positions in the genome 
-that uniquely mapped reads map to and the total number of uniquely mappable 
+The non-redundant fraction (NRF) is the fraction of non-redundant mapped reads
+in a dataset; it is the ratio between the number of positions in the genome
+that uniquely mapped reads map to and the total number of uniquely mappable
 reads. The NRF should be > 0.8. The PBC1 is the ratio of genomic locations
-with EXACTLY one read pair over the genomic locations with AT LEAST one read 
-pair. PBC1 is the primary measure, and the PBC1 should be close to 1. 
-Provisionally 0-0.5 is severe bottlenecking, 0.5-0.8 is moderate bottlenecking, 
-0.8-0.9 is mild bottlenecking, and 0.9-1.0 is no bottlenecking. The PBC2 is 
-the ratio of genomic locations with EXACTLY one read pair over the genomic 
-locations with EXACTLY two read pairs. The PBC2 should be significantly 
+with EXACTLY one read pair over the genomic locations with AT LEAST one read
+pair. PBC1 is the primary measure, and the PBC1 should be close to 1.
+Provisionally 0-0.5 is severe bottlenecking, 0.5-0.8 is moderate bottlenecking,
+0.8-0.9 is mild bottlenecking, and 0.9-1.0 is no bottlenecking. The PBC2 is
+the ratio of genomic locations with EXACTLY one read pair over the genomic
+locations with EXACTLY two read pairs. The PBC2 should be significantly
 greater than 1.
 </pre>
 
@@ -867,7 +865,7 @@ greater than 1.
   {% endif %}
 <pre>
 Preseq performs a yield prediction by subsampling the reads, calculating the
-number of distinct reads, and then extrapolating out to see where the 
+number of distinct reads, and then extrapolating out to see where the
 expected number of distinct reads no longer increases. The confidence interval
 gives a gauge as to the validity of the yield predictions.
 </pre>
@@ -877,10 +875,10 @@ gives a gauge as to the validity of the yield predictions.
   {{ inline_img(sample['fraglen_dist']) }}
   {{ qc_table(sample['nucleosomal']) }}
 <pre>
-Open chromatin assays show distinct fragment length enrichments, as the cut 
-sites are only in open chromatin and not in nucleosomes. As such, peaks 
-representing different n-nucleosomal (ex mono-nucleosomal, di-nucleosomal) 
-fragment lengths will arise. Good libraries will show these peaks in a 
+Open chromatin assays show distinct fragment length enrichments, as the cut
+sites are only in open chromatin and not in nucleosomes. As such, peaks
+representing different n-nucleosomal (ex mono-nucleosomal, di-nucleosomal)
+fragment lengths will arise. Good libraries will show these peaks in a
 fragment length distribution and will show specific peak ratios.
 </pre>
 
@@ -900,7 +898,7 @@ into consideration as necessary.
   {{ inline_img(sample['enrichment_plots']['tss']) }}
   <pre>
 Open chromatin assays should show enrichment in open chromatin sites, such as
-TSS's. An average TSS enrichment is above 6-7. A strong TSS enrichment is 
+TSS's. An average TSS enrichment is above 6-7. A strong TSS enrichment is
 above 10.
   </pre>
 
@@ -918,10 +916,10 @@ above 10.
   </table>
 <pre>
 Signal to noise can be assessed by considering whether reads are falling into
-known open regions (such as DHS regions) or not. A high fraction of reads 
+known open regions (such as DHS regions) or not. A high fraction of reads
 should fall into the universal (across cell type) DHS set. A small fraction
 should fall into the blacklist regions. A high set (though not all) should
-fall into the promoter regions. A high set (though not all) should fall into 
+fall into the promoter regions. A high set (though not all) should fall into
 the enhancer regions. The promoter regions should not take up all reads, as
 it is known that there is a bias for promoters in open chromatin assays.
 </pre>
@@ -931,7 +929,7 @@ it is known that there is a bias for promoters in open chromatin assays.
   {{ inline_img(sample['roadmap_plot']) }}
 <pre>
 This bar chart shows the correlation between the Roadmap DNase samples to
-your sample, when the signal in the universal DNase peak region sets are 
+your sample, when the signal in the universal DNase peak region sets are
 compared. The closer the sample is in signal distribution in the regions
 to your sample, the higher the correlation.
 </pre>
@@ -953,7 +951,7 @@ def parse_args():
     parser = argparse.ArgumentParser(description='ATAC-seq QC package')
 
     # Directories and prefixes
-    parser.add_argument('--workdir',help='Working directory')
+    parser.add_argument('--workdir', help='Working directory')
     parser.add_argument('--outdir', help='Output directory')
     parser.add_argument('--outprefix', help='Output prefix')
 
@@ -974,12 +972,12 @@ def parse_args():
                         help='Specific pipeline was used')
 
     # Mode 1: Provide an input prefix
-    parser.add_argument('--inprefix', 
+    parser.add_argument('--inprefix',
                         default='test',
                         help='Input file prefix')
 
     # Mode 2: Define every possible QC file
-    parser.add_argument('--fastq1', 
+    parser.add_argument('--fastq1',
                         help='First set of reads if paired end, \
                               or the single end reads')
     parser.add_argument('--fastq2',
@@ -1015,7 +1013,7 @@ def parse_args():
     REG2MAP = args.reg2map
     ROADMAP_META = args.meta
 
-    # If mode 1 - TO BE DEPRECATED. In this case, the module is run with 
+    # If mode 1 - TO BE DEPRECATED. In this case, the module is run with
     # Jin's pipeline
     if args.pipeline == 'kundajelab':
         FASTQ = args.fastq1
@@ -1029,7 +1027,7 @@ def parse_args():
             INPUT_PREFIX)
         PEAKS = '{0}.nodup.nonchrM.tn5.pf_peaks.narrowPeak'.format(
             INPUT_PREFIX)
-    else: # mode 2  
+    else:  # mode 2
         FASTQ = args.fastq1
         ALIGNED_BAM = args.alignedbam
         ALIGNMENT_LOG = args.alignmentlog
@@ -1041,19 +1039,20 @@ def parse_args():
         PEAKS = args.peaks
 
     return NAME, OUTPUT_PREFIX, REF, TSS, DNASE, BLACKLIST, PROM, ENH, \
-           REG2MAP, ROADMAP_META, GENOME, FASTQ, ALIGNED_BAM, ALIGNMENT_LOG, \
-           COORDSORT_BAM, DUP_LOG, FINAL_BAM, FINAL_BED, BIGWIG, PEAKS
+        REG2MAP, ROADMAP_META, GENOME, FASTQ, ALIGNED_BAM, \
+        ALIGNMENT_LOG, COORDSORT_BAM, DUP_LOG, FINAL_BAM, \
+        FINAL_BED, BIGWIG, PEAKS
 
 
 def main():
 
     # Parse args
-    [ NAME, OUTPUT_PREFIX, REF, TSS, DNASE, BLACKLIST, PROM, ENH, REG2MAP, \
-      ROADMAP_META, GENOME, FASTQ, ALIGNED_BAM, ALIGNMENT_LOG, COORDSORT_BAM, \
-      DUP_LOG, FINAL_BAM, FINAL_BED, BIGWIG, PEAKS ] = parse_args()
+    [NAME, OUTPUT_PREFIX, REF, TSS, DNASE, BLACKLIST, PROM, ENH, REG2MAP,
+     ROADMAP_META, GENOME, FASTQ, ALIGNED_BAM, ALIGNMENT_LOG, COORDSORT_BAM,
+     DUP_LOG, FINAL_BAM, FINAL_BED, BIGWIG, PEAKS] = parse_args()
 
     # Set up the log file and timing
-    logging.basicConfig(filename='test.log',level=logging.DEBUG)
+    logging.basicConfig(filename='test.log', level=logging.DEBUG)
     start = timeit.default_timer()
 
     # First check if paired/single
@@ -1070,7 +1069,7 @@ def main():
                                          OUTPUT_PREFIX)
 
     # Library complexity: Preseq results, NRF, PBC1, PBC2
-    picard_est_library_size = get_picard_complexity_metrics(ALIGNED_BAM, 
+    picard_est_library_size = get_picard_complexity_metrics(ALIGNED_BAM,
                                                             OUTPUT_PREFIX)
     preseq_data, preseq_log = run_preseq(ALIGNED_BAM, OUTPUT_PREFIX)
     encode_lib_metrics = get_encode_complexity_measures(preseq_log)
@@ -1082,8 +1081,8 @@ def main():
 
     # Final read statistics
     first_read_count, final_read_count, \
-    fract_reads_left = get_final_read_count(ALIGNED_BAM,
-                                            FINAL_BAM)
+        fract_reads_left = get_final_read_count(ALIGNED_BAM,
+                                                FINAL_BAM)
 
     # Insert size distribution
     insert_data, insert_plot = get_insert_distribution(FINAL_BAM,
@@ -1091,34 +1090,34 @@ def main():
 
     # Enrichments: V plot for enrichment
     vplot_file, vplot_large_file, tss_point_val = make_vplot(COORDSORT_BAM,
-                                              TSS, OUTPUT_PREFIX)
+                                                             TSS,
+                                                             OUTPUT_PREFIX)
 
     # Signal to noise: reads in DHS regions vs not, reads falling
     # into blacklist regions
     reads_dnase, fract_dnase, reads_blacklist, fract_blacklist, \
-    reads_prom, fract_prom, reads_enh, fract_enh, \
-    reads_peaks, fract_peaks = get_signal_to_noise(FINAL_BED,
-                                                   DNASE,
-                                                   BLACKLIST,
-                                                   PROM,
-                                                   ENH,
-                                                   PEAKS)
+        reads_prom, fract_prom, reads_enh, fract_enh, \
+        reads_peaks, fract_peaks = get_signal_to_noise(FINAL_BED,
+                                                       DNASE,
+                                                       BLACKLIST,
+                                                       PROM,
+                                                       ENH,
+                                                       PEAKS)
 
     # Also need to run n-nucleosome estimation
     nucleosomal_qc = fragment_length_qc(read_picard_histogram(insert_data))
 
     # Compare to roadmap
-    roadmap_compare_plot = compare_to_roadmap(BIGWIG, DNASE, REG2MAP, 
+    roadmap_compare_plot = compare_to_roadmap(BIGWIG, DNASE, REG2MAP,
                                               ROADMAP_META, OUTPUT_PREFIX)
 
     # Finally output the bar chart of reads
     read_count_data = [first_read_count, first_read_count*fract_mapq,
-                 first_read_count*fract_mapq*(1-float(percent_dup)),
-                 final_read_count]
-    read_count_labels = ['Start', 'q>30', 'dups removed', \
+                       first_read_count*fract_mapq*(1-float(percent_dup)),
+                       final_read_count]
+    read_count_labels = ['Start', 'q>30', 'dups removed',
                          'chrM removed (final)']
     read_tracker_plot = track_reads(read_count_data, read_count_labels)
-
 
     # Take all this info and render the html file
     SAMPLE_INFO = OrderedDict([
@@ -1132,9 +1131,9 @@ def main():
         ('Read count from sequencer', first_read_count),
         ('Read count successfully aligned', mapped_count),
         ('Read count after filtering for mapping quality', num_mapq),
-        ('Read count after removing duplicate reads', 
+        ('Read count after removing duplicate reads',
             int(num_mapq - read_dups)),
-        ('Read count after removing mitochondrial reads (final read count)', 
+        ('Read count after removing mitochondrial reads (final read count)',
             final_read_count),
     ])
 
@@ -1142,7 +1141,7 @@ def main():
         ('Mapping quality > q30 (out of total)', (num_mapq, fract_mapq)),
         ('Duplicates (after filtering)', (read_dups, percent_dup)),
         ('Mitochondrial reads (out of total)', (chr_m_reads, fraction_chr_m)),
-        ('Final reads (after all filters)', (final_read_count, 
+        ('Final reads (after all filters)', (final_read_count,
                                              fract_reads_left)),
     ])
 
@@ -1151,13 +1150,13 @@ def main():
     }
 
     ANNOT_ENRICHMENTS = OrderedDict([
-        ('Fraction of reads in universal DHS regions', (reads_dnase, 
+        ('Fraction of reads in universal DHS regions', (reads_dnase,
                                                         fract_dnase)),
-        ('Fraction of reads in blacklist regions', (reads_blacklist, 
+        ('Fraction of reads in blacklist regions', (reads_blacklist,
                                                     fract_blacklist)),
         ('Fraction of reads in promoter regions', (reads_prom, fract_prom)),
         ('Fraction of reads in enhancer regions', (reads_enh, fract_enh)),
-        ('Fraction of reads in called peak regions', (reads_peaks, 
+        ('Fraction of reads in called peak regions', (reads_peaks,
                                                       fract_peaks)),
     ])
 
@@ -1187,12 +1186,12 @@ def main():
 
         # GC
         ('gc_bias', b64encode(plot_gc(gc_out))),
-        
+
         # Annotation based statistics
         ('enrichment_plots', ENRICHMENT_PLOTS),
         ('TSS_enrichment', tss_point_val),
         ('annot_enrichments', ANNOT_ENRICHMENTS),
-        
+
         # Roadmap plot
         ('roadmap_plot', b64encode(roadmap_compare_plot)),
     ])
@@ -1206,11 +1205,11 @@ def main():
     textfile = open('{0}_qc.txt'.format(OUTPUT_PREFIX), 'w')
     for key, value in SAMPLE.iteritems():
         # Make sure to not get b64encode
-        if isinstance(value, str) and (len(value) < 300): 
+        if isinstance(value, str) and (len(value) < 300):
             textfile.write('{0}\t{1}\n'.format(key, value))
-        elif isinstance(value, int): 
+        elif isinstance(value, int):
             textfile.write('{0}\t{1}\n'.format(key, value))
-        elif isinstance(value, float): 
+        elif isinstance(value, float):
             textfile.write('{0}\t{1}\n'.format(key, value))
         elif isinstance(value, OrderedDict):
             for dict_key, dict_value in value.iteritems():
@@ -1224,12 +1223,11 @@ def main():
         # QC tables go here
         elif isinstance(value, list):
             for result in value:
-                textfile.write('{0}\t{1}\n'.format(result.metric, 
+                textfile.write('{0}\t{1}\n'.format(result.metric,
                                                    result.message))
         else:
             pass
     textfile.close()
-
 
     stop = timeit.default_timer()
     print "Run time:", str(datetime.timedelta(seconds=int(stop - start)))
@@ -1237,6 +1235,3 @@ def main():
     return None
 
 main()
-
-
-# bash run_ataqc.sh ../processed/Day00-D1-FrozenKera-1A/ ./Day00-D1-FrozenKera-1A Day00-D1-FrozenKera-1A Day00-D1-FrozenKera-1A_S1_L001_R1_001.trim.PE2SE ../raw/Day00-D1-FrozenKera-1A_S1_L001_R1_001.trim.fastq.gz
