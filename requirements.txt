@@ -1,0 +1,14 @@
+All packages needed
+
+Python (Anaconda)
+- pysam
+- pybedtools
+- metaseq
+- matplotlib
+
+Other
+- samtools
+- bedtools
+- picard
+- preseq
+- ucsc_tools
