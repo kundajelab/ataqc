@@ -1,8 +1,10 @@
 # Daniel Kim, CS Foo
-# 2016-02-17
+# 2016-03-28
 # Script to run ataqc, all parts
 
 import matplotlib
+matplotlib.use('Agg')
+
 import os
 import sys
 import pysam
@@ -26,7 +28,7 @@ from io import BytesIO
 from scipy.signal import find_peaks_cwt
 from jinja2 import Template
 from matplotlib import pyplot as plt
-matplotlib.use('Agg')
+
 
 # QC STUFF
 
@@ -170,7 +172,7 @@ def get_gc(qsorted_bam_file, reference_fasta, prefix):
     plot_file = '{0}_gcPlot.pdf'.format(prefix)
     summary_file = '{0}_gcSummary.txt'.format(prefix)
     get_gc_metrics = ('java -Xmx4G -jar '
-                      '${PICARDROOT}/picard.jar '
+                      '{5}/picard.jar '
                       'CollectGcBiasMetrics R={0} I={1} O={2} '
                       'VERBOSITY=WARNING QUIET=TRUE '
                       'ASSUME_SORTED=FALSE '
@@ -178,7 +180,8 @@ def get_gc(qsorted_bam_file, reference_fasta, prefix):
                                                 qsorted_bam_file,
                                                 output_file,
                                                 plot_file,
-                                                summary_file)
+                                                summary_file,
+                                                os.environ['PICARDROOT'])
     logging.info(get_gc_metrics)
     os.system(get_gc_metrics)
     return output_file, plot_file, summary_file
@@ -222,7 +225,7 @@ def plot_gc(data_file):
     plot_img = BytesIO()
     fig.savefig(plot_img, format='png')
 
-    return plot_img.getvalue()
+    return b64encode(plot_img.getvalue())
 
 
 def run_preseq(bam_w_dups, prefix):
@@ -281,15 +284,17 @@ def get_picard_complexity_metrics(aligned_bam, prefix):
     '''
     out_file = '{0}.picardcomplexity.qc'.format(prefix)
     get_gc_metrics = ('java -Xmx4G -jar '
-                      '${PICARD}/picard.jar '
+                      '{2}/picard.jar '
                       'EstimateLibraryComplexity INPUT={0} OUTPUT={1} '
                       'VERBOSITY=WARNING '
                       'QUIET=TRUE').format(aligned_bam,
-                                           out_file)
+                                           out_file,
+                                           os.environ['PICARDROOT'])
     os.system(get_gc_metrics)
 
     # Extract the actual estimated library size
     header_seen = False
+    est_library_size = 0
     with open(out_file, 'rb') as fp:
         for line in fp:
             if header_seen:
@@ -308,7 +313,7 @@ def preseq_plot(data_file):
     try:
         data = np.loadtxt(data_file, skiprows=1)
     except IOError:
-        return 'None'
+        return ''
     data /= 1e6  # scale to millions of reads
 
     fig = plt.figure()
@@ -328,11 +333,11 @@ def preseq_plot(data_file):
     plot_img = BytesIO()
     fig.savefig(plot_img, format='png')
 
-    return plot_img.getvalue()
+    return b64encode(plot_img.getvalue())
 
 
-def make_vplot(bam_file, tss, prefix, bins=400, bp_edge=2000, processes=8,
-               greenleaf_norm=True):
+def make_vplot(bam_file, tss, prefix, genome, bins=400, bp_edge=2000, 
+               processes=8, greenleaf_norm=True):
     '''
     Take bootstraps, generate V-plots, and get a mean and
     standard deviation on the plot. Produces 2 plots. One is the
@@ -345,7 +350,7 @@ def make_vplot(bam_file, tss, prefix, bins=400, bp_edge=2000, processes=8,
 
     # Load the TSS file
     tss = pybedtools.BedTool(tss)
-    tss_ext = tss.slop(b=bp_edge, genome='hg19')
+    tss_ext = tss.slop(b=bp_edge, genome=genome)
 
     # Load the bam file
     bam = metaseq.genomic_signal(bam_file, 'bam')
@@ -482,13 +487,14 @@ def get_insert_distribution(final_bam, prefix):
     insert_data = '{0}.inserts.hist_data.log'.format(prefix)
     insert_plot = '{0}.inserts.hist_graph.pdf'.format(prefix)
     graph_insert_dist = ('java -Xmx4G -jar '
-                         '${PICARDROOT}/picard.jar '
+                         '{3}/picard.jar '
                          'CollectInsertSizeMetrics '
                          'INPUT={0} OUTPUT={1} H={2} '
                          'VERBOSITY=WARNING QUIET=TRUE '
                          'W=1000 STOP_AFTER=5000000').format(final_bam,
                                                              insert_data,
-                                                             insert_plot)
+                                                             insert_plot,
+                                                             os.environ['PICARDROOT'])
     logging.info(graph_insert_dist)
     os.system(graph_insert_dist)
     return insert_data, insert_plot
@@ -563,7 +569,7 @@ def track_reads(reads_list, labels):
     plot_img = BytesIO()
     fig.savefig(plot_img, format='png')
 
-    return plot_img.getvalue()
+    return b64encode(plot_img.getvalue())
 
 
 def read_picard_histogram(data_file):
@@ -608,7 +614,12 @@ def fragment_length_qc(data):
 
 
 def fragment_length_plot(data_file, peaks=None):
-    data = read_picard_histogram(data_file)
+    try:
+        data = read_picard_histogram(data_file)
+    except IOError:
+        return ''
+    except TypeError:
+        return '' 
 
     fig = plt.figure()
     plt.bar(data[:, 0], data[:, 1])
@@ -621,7 +632,7 @@ def fragment_length_plot(data_file, peaks=None):
     plot_img = BytesIO()
     fig.savefig(plot_img, format='png')
 
-    return plot_img.getvalue()
+    return b64encode(plot_img.getvalue())
 
 
 def compare_to_roadmap(bw_file, regions_file, reg2map_file,
@@ -684,12 +695,16 @@ def compare_to_roadmap(bw_file, regions_file, reg2map_file,
     fig.savefig(plot_img, format='png', bbox_inches='tight')
     fig.savefig('test.png', format='png', bbox_inches='tight')
 
-    return plot_img.getvalue()
+    return b64encode(plot_img.getvalue())
 
 
 html_template = Template("""
 {% macro inline_img(base64_img, img_type='png') -%}
-    <img src="data:image/{{ img_type }};base64,{{ base64_img }}">
+    {% if base64_img == '' %}
+        <pre>Metric failed.</pre>
+    {% else %}
+        <img src="data:image/{{ img_type }};base64,{{ base64_img }}">
+    {% endif %}
 {%- endmacro %}
 
 {% macro qc_table(qc_results) -%}
@@ -1071,7 +1086,11 @@ def main():
     # Library complexity: Preseq results, NRF, PBC1, PBC2
     picard_est_library_size = get_picard_complexity_metrics(ALIGNED_BAM,
                                                             OUTPUT_PREFIX)
-    preseq_data, preseq_log = run_preseq(ALIGNED_BAM, OUTPUT_PREFIX)
+    #preseq_data, preseq_log = run_preseq(ALIGNED_BAM, OUTPUT_PREFIX)
+    # Test purposes
+    preseq_data = '/srv/scratch/dskim89/ataqc/results/2016-03-27.ENCODE_Hardison_Wold/test.preseq.dat'
+    preseq_log = '/srv/scratch/dskim89/ataqc/results/2016-03-27.ENCODE_Hardison_Wold/test.preseq.log'
+
     encode_lib_metrics = get_encode_complexity_measures(preseq_log)
 
     # Filtering metrics: duplicates, map quality
@@ -1084,14 +1103,19 @@ def main():
         fract_reads_left = get_final_read_count(ALIGNED_BAM,
                                                 FINAL_BAM)
 
-    # Insert size distribution
-    insert_data, insert_plot = get_insert_distribution(FINAL_BAM,
-                                                       OUTPUT_PREFIX)
+    # Insert size distribution - CAN'T GET THIS FOR SE FILES
+    if paired_status == "Paired-ended":
+        insert_data, insert_plot = get_insert_distribution(FINAL_BAM,
+                                                           OUTPUT_PREFIX)
+    else:
+        insert_data = ''
+        insert_plot = ''
 
     # Enrichments: V plot for enrichment
     vplot_file, vplot_large_file, tss_point_val = make_vplot(COORDSORT_BAM,
                                                              TSS,
-                                                             OUTPUT_PREFIX)
+                                                             OUTPUT_PREFIX,
+                                                             GENOME)
 
     # Signal to noise: reads in DHS regions vs not, reads falling
     # into blacklist regions
@@ -1105,7 +1129,10 @@ def main():
                                                        PEAKS)
 
     # Also need to run n-nucleosome estimation
-    nucleosomal_qc = fragment_length_qc(read_picard_histogram(insert_data))
+    if paired_status == 'Paired-ended':
+        nucleosomal_qc = fragment_length_qc(read_picard_histogram(insert_data))
+    else:
+        nucleosomal_qc = ''
 
     # Compare to roadmap
     roadmap_compare_plot = compare_to_roadmap(BIGWIG, DNASE, REG2MAP,
@@ -1166,7 +1193,7 @@ def main():
 
         # Summary
         ('summary_stats', SUMMARY_STATS),
-        ('read_tracker', b64encode(read_tracker_plot)),
+        ('read_tracker', read_tracker_plot),
 
         # Alignment statistics
         ('bowtie_stats', BOWTIE_STATS),
@@ -1178,14 +1205,14 @@ def main():
         # Library complexity statistics
         ('encode_lib_complexity', encode_lib_metrics),
         ('picard_est_library_size', picard_est_library_size),
-        ('yield_prediction', b64encode(preseq_plot(preseq_data))),
+        ('yield_prediction', preseq_plot(preseq_data)),
 
         # Fragment length statistics
-        ('fraglen_dist', b64encode(fragment_length_plot(insert_data))),
+        ('fraglen_dist', fragment_length_plot(insert_data)),
         ('nucleosomal', nucleosomal_qc),
 
         # GC
-        ('gc_bias', b64encode(plot_gc(gc_out))),
+        ('gc_bias', plot_gc(gc_out)),
 
         # Annotation based statistics
         ('enrichment_plots', ENRICHMENT_PLOTS),
@@ -1193,8 +1220,11 @@ def main():
         ('annot_enrichments', ANNOT_ENRICHMENTS),
 
         # Roadmap plot
-        ('roadmap_plot', b64encode(roadmap_compare_plot)),
+        ('roadmap_plot', roadmap_compare_plot),
     ])
+
+    #import ipdb
+    #ipdb.set_trace()
 
     results = open('{0}_qc.html'.format(OUTPUT_PREFIX), 'w')
     results.write(html_template.render(sample=SAMPLE))
@@ -1205,7 +1235,7 @@ def main():
     textfile = open('{0}_qc.txt'.format(OUTPUT_PREFIX), 'w')
     for key, value in SAMPLE.iteritems():
         # Make sure to not get b64encode
-        if isinstance(value, str) and (len(value) < 300):
+        if isinstance(value, str) and (len(value) < 300) and (len(value) > 0):
             textfile.write('{0}\t{1}\n'.format(key, value))
         elif isinstance(value, int):
             textfile.write('{0}\t{1}\n'.format(key, value))
@@ -1234,4 +1264,4 @@ def main():
 
     return None
 
-main()
+main(
