@@ -281,7 +281,7 @@ def get_picard_complexity_metrics(aligned_bam, prefix):
     '''
     out_file = '{0}.picardcomplexity.qc'.format(prefix)
     get_gc_metrics = ('java -Xmx4G -jar '
-                      '$PICARD/picard.jar '
+                      '${PICARD}/picard.jar '
                       'EstimateLibraryComplexity INPUT={0} OUTPUT={1} '
                       'VERBOSITY=WARNING '
                       'QUIET=TRUE').format(aligned_bam,
@@ -482,7 +482,7 @@ def get_insert_distribution(final_bam, prefix):
     insert_data = '{0}.inserts.hist_data.log'.format(prefix)
     insert_plot = '{0}.inserts.hist_graph.pdf'.format(prefix)
     graph_insert_dist = ('java -Xmx4G -jar '
-                         '/software/picard-tools/1.129/picard.jar '
+                         '${PICARDROOT}/picard.jar '
                          'CollectInsertSizeMetrics '
                          'INPUT={0} OUTPUT={1} H={2} '
                          'VERBOSITY=WARNING QUIET=TRUE '
