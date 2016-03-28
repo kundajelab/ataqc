@@ -1223,9 +1223,6 @@ def main():
         ('roadmap_plot', roadmap_compare_plot),
     ])
 
-    #import ipdb
-    #ipdb.set_trace()
-
     results = open('{0}_qc.html'.format(OUTPUT_PREFIX), 'w')
     results.write(html_template.render(sample=SAMPLE))
     results.close()
@@ -1264,4 +1261,4 @@ def main():
 
     return None
 
-main(
+main()
