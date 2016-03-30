@@ -294,7 +294,7 @@ def get_picard_complexity_metrics(aligned_bam, prefix):
 
     # Extract the actual estimated library size
     header_seen = False
-    est_library_size = 0
+    est_library_size = 'Metric failed (does not work for single end data).'
     with open(out_file, 'rb') as fp:
         for line in fp:
             if header_seen:
@@ -336,7 +336,7 @@ def preseq_plot(data_file):
     return b64encode(plot_img.getvalue())
 
 
-def make_vplot(bam_file, tss, prefix, genome, bins=400, bp_edge=2000, 
+def make_vplot(bam_file, tss, prefix, genome, read_len, bins=400, bp_edge=2000, 
                processes=8, greenleaf_norm=True):
     '''
     Take bootstraps, generate V-plots, and get a mean and
@@ -353,9 +353,18 @@ def make_vplot(bam_file, tss, prefix, genome, bins=400, bp_edge=2000,
     tss_ext = tss.slop(b=bp_edge, genome=genome)
 
     # Load the bam file
-    bam = metaseq.genomic_signal(bam_file, 'bam')
-    bam_array = bam.array(tss_ext, bins=bins,
+    bam = metaseq.genomic_signal(bam_file, 'bam') # Need to shift reads and just get ends, just load bed file?
+    bam_array = bam.array(tss_ext, bins=bins, shift_width = -read_len/2, # Shift to center the read on the cut site
                           processes=processes, stranded=True)
+
+    # Actually first build an "ends" file
+    #get_ends = '''zcat {0} | awk -F '\t' 'BEGIN {{OFS="\t"}} {{if ($6 == "-") {{$2=$3-1; print}} else {{$3=$2+1; print}} }}' | gzip -c > {1}_ends.bed.gz'''.format(bed_file, prefix)
+    #print(get_ends)
+    #os.system(get_ends)
+
+    #bed_reads = metaseq.genomic_signal('{0}_ends.bed.gz'.format(prefix), 'bed')
+    #bam_array = bed_reads.array(tss_ext, bins=bins,
+    #                      processes=processes, stranded=True)
 
     # Normalization (Greenleaf style): Find the avg height
     # at the end bins and take fold change over that
@@ -402,7 +411,7 @@ def make_vplot(bam_file, tss, prefix, genome, bins=400, bp_edge=2000,
     return vplot_file, vplot_large_file, tss_point_val
 
 
-def get_picard_dup_stats(picard_dup_file):
+def get_picard_dup_stats(picard_dup_file, paired_status):
     '''
     Parse Picard's MarkDuplicates metrics file
     '''
@@ -419,9 +428,12 @@ def get_picard_dup_stats(picard_dup_file):
             if mark == 2:
                 line_elems = line.strip().split('\t')
                 dup_stats['PERCENT_DUPLICATION'] = line_elems[7]
-                dup_stats['READ_PAIR_DUPLICATES'] = line_elems[5]
+                dup_stats['READ_PAIR_DUPLICATES'] = line_elems[5] 
                 dup_stats['READ_PAIRS_EXAMINED'] = line_elems[2]
-                return float(line_elems[5]), float(line_elems[7])
+                if paired_status == 'Paired-ended':
+                    return float(line_elems[5]), float(line_elems[7])
+                else:
+                    return float(line_elems[4]), float(line_elems[7])
 
             if mark > 0:
                 mark += 1
@@ -1086,16 +1098,15 @@ def main():
     # Library complexity: Preseq results, NRF, PBC1, PBC2
     picard_est_library_size = get_picard_complexity_metrics(ALIGNED_BAM,
                                                             OUTPUT_PREFIX)
-    #preseq_data, preseq_log = run_preseq(ALIGNED_BAM, OUTPUT_PREFIX)
-    # Test purposes
-    preseq_data = '/srv/scratch/dskim89/ataqc/results/2016-03-27.ENCODE_Hardison_Wold/test.preseq.dat'
-    preseq_log = '/srv/scratch/dskim89/ataqc/results/2016-03-27.ENCODE_Hardison_Wold/test.preseq.log'
+    preseq_data, preseq_log = run_preseq(ALIGNED_BAM, OUTPUT_PREFIX) # SORTED BAM
+    #preseq_data = '/srv/scratch/dskim89/ataqc/results/2016-03-27.ENCODE_Hardison_Wold/wold/forebrain_e14-5.b1/forebrain_e14-5.b1.preseq.dat'
+    #preseq_log = '/srv/scratch/dskim89/ataqc/results/2016-03-27.ENCODE_Hardison_Wold/wold/forebrain_e14-5.b1/forebrain_e14-5.b1.preseq.log'
 
     encode_lib_metrics = get_encode_complexity_measures(preseq_log)
 
     # Filtering metrics: duplicates, map quality
     num_mapq, fract_mapq = get_fract_mapq(ALIGNED_BAM)
-    read_dups, percent_dup = get_picard_dup_stats(DUP_LOG)
+    read_dups, percent_dup = get_picard_dup_stats(DUP_LOG, paired_status)
     [flagstat, mapped_count] = get_samtools_flagstat(ALIGNED_BAM)
 
     # Final read statistics
@@ -1112,10 +1123,11 @@ def main():
         insert_plot = ''
 
     # Enrichments: V plot for enrichment
-    vplot_file, vplot_large_file, tss_point_val = make_vplot(COORDSORT_BAM,
+    vplot_file, vplot_large_file, tss_point_val = make_vplot(FINAL_BAM, # Use final to avoid duplicates
                                                              TSS,
                                                              OUTPUT_PREFIX,
-                                                             GENOME)
+                                                             GENOME,
+                                                             read_len)
 
     # Signal to noise: reads in DHS regions vs not, reads falling
     # into blacklist regions
