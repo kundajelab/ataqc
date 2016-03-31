@@ -1026,7 +1026,7 @@ def parse_args():
     # Set up all variables
     INPUT_PREFIX = os.path.join(args.workdir, args.inprefix)
     OUTPUT_PREFIX = os.path.join(args.outdir, args.outprefix)
-    os.system('mkdir {0}'.format(args.outdir))
+    os.system('mkdir -p {0}'.format(args.outdir))
     NAME = args.outprefix
 
     # Set up annotations
