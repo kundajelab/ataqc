@@ -1,3 +1,5 @@
+#!/usr/bin/env python2
+
 # Daniel Kim, CS Foo
 # 2016-03-28
 # Script to run ataqc, all parts
@@ -250,7 +252,29 @@ def run_preseq(bam_w_dups, prefix):
     return preseq_data, preseq_log
 
 
-def get_encode_complexity_measures(preseq_log):
+def get_encode_complexity_measures(pbc_output):
+    '''
+    Gets the unique count statistics from the filtered bam file,
+    which is consistent with ENCODE metrics for ChIP-seq
+    '''
+    with open(pbc_output, 'rb') as fp:
+        for line in fp:
+            l_list = line.strip().split('\t')
+            NRF = l_list[4]
+            PBC1 = l_list[5]
+            PBC2 = l_list[6]
+            break
+
+    # QC check
+    results = []
+    results.append(QCGreaterThanEqualCheck('NRF', 0.8)(NRF))
+    results.append(QCGreaterThanEqualCheck('PBC1', 0.8)(PBC1))
+    results.append(QCGreaterThanEqualCheck('PBC2', 1.0)(PBC2))
+
+    return results
+
+
+def get_encode_complexity_measures_OLD(preseq_log):
     '''
     Use info from the preseq log to calculate NRF, PBC1, and PBC2
     '''
@@ -1013,6 +1037,7 @@ def parse_args():
     parser.add_argument('--alignmentlog', help='Alignment log')
     parser.add_argument('--coordsortbam', help='BAM file sorted by coordinate')
     parser.add_argument('--duplog', help='Picard duplicate metrics file')
+    parser.add_argument('--pbc', help='ENCODE library complexity metrics file')
     parser.add_argument('--finalbam', help='Final filtered BAM file')
     parser.add_argument('--finalbed',
                         help='Final filtered alignments in BED format')
@@ -1048,6 +1073,7 @@ def parse_args():
         ALIGNMENT_LOG = '{0}.align.log'.format(INPUT_PREFIX)
         COORDSORT_BAM = '{0}.nodup.bam'.format(INPUT_PREFIX)
         DUP_LOG = '{0}.dup.qc'.format(INPUT_PREFIX)
+        PBC_LOG = '{0}.nodup.pbc.qc'.format(INPUT_PREFIX)
         FINAL_BAM = '{0}.nodup.nonchrM.bam'.format(INPUT_PREFIX)
         FINAL_BED = '{0}.nodup.nonchrM.tn5.bed.gz'.format(INPUT_PREFIX)
         BIGWIG = '{0}.nodup.nonchrM.tn5.pf.pval.signal.bigwig'.format(
@@ -1060,6 +1086,7 @@ def parse_args():
         ALIGNMENT_LOG = args.alignmentlog
         COORDSORT_BAM = args.coordsortbam
         DUP_LOG = args.duplog
+        PBC_LOG = args.pbc
         FINAL_BAM = args.finalbam
         FINAL_BED = args.finalbed
         BIGWIG = args.bigwig
@@ -1067,7 +1094,7 @@ def parse_args():
 
     return NAME, OUTPUT_PREFIX, REF, TSS, DNASE, BLACKLIST, PROM, ENH, \
         REG2MAP, ROADMAP_META, GENOME, FASTQ, ALIGNED_BAM, \
-        ALIGNMENT_LOG, COORDSORT_BAM, DUP_LOG, FINAL_BAM, \
+        ALIGNMENT_LOG, COORDSORT_BAM, DUP_LOG, PBC_LOG, FINAL_BAM, \
         FINAL_BED, BIGWIG, PEAKS
 
 
@@ -1076,7 +1103,7 @@ def main():
     # Parse args
     [NAME, OUTPUT_PREFIX, REF, TSS, DNASE, BLACKLIST, PROM, ENH, REG2MAP,
      ROADMAP_META, GENOME, FASTQ, ALIGNED_BAM, ALIGNMENT_LOG, COORDSORT_BAM,
-     DUP_LOG, FINAL_BAM, FINAL_BED, BIGWIG, PEAKS] = parse_args()
+     DUP_LOG, PBC_LOG, FINAL_BAM, FINAL_BED, BIGWIG, PEAKS] = parse_args()
 
     # Set up the log file and timing
     logging.basicConfig(filename='test.log', level=logging.DEBUG)
@@ -1091,7 +1118,7 @@ def main():
     # Sequencing metrics: Bowtie1/2 alignment log, chrM, GC bias
     BOWTIE_STATS = get_bowtie_stats(ALIGNMENT_LOG)
     chr_m_reads, fraction_chr_m = get_chr_m(COORDSORT_BAM)
-    gc_out, gc_plot, gc_summary = get_gc(COORDSORT_BAM,
+    gc_out, gc_plot, gc_summary = get_gc(FINAL_BAM,
                                          REF,
                                          OUTPUT_PREFIX)
 
@@ -1102,7 +1129,7 @@ def main():
     #preseq_data = '/srv/scratch/dskim89/ataqc/results/2016-03-27.ENCODE_Hardison_Wold/wold/forebrain_e14-5.b1/forebrain_e14-5.b1.preseq.dat'
     #preseq_log = '/srv/scratch/dskim89/ataqc/results/2016-03-27.ENCODE_Hardison_Wold/wold/forebrain_e14-5.b1/forebrain_e14-5.b1.preseq.log'
 
-    encode_lib_metrics = get_encode_complexity_measures(preseq_log)
+    encode_lib_metrics = get_encode_complexity_measures(PBC_LOG)
 
     # Filtering metrics: duplicates, map quality
     num_mapq, fract_mapq = get_fract_mapq(ALIGNED_BAM)
