@@ -464,6 +464,52 @@ def get_picard_dup_stats(picard_dup_file, paired_status):
     return None
 
 
+def get_mito_dups(sorted_bam, prefix):
+    '''
+    Marks duplicates in the original aligned bam file and then determines
+    how many reads are duplicates AND from chrM
+    '''
+
+    out_file = '{0}.dupmark.ataqc.bam'.format(prefix)
+    metrics_file = '{0}.dup.ataqc'
+
+    # Run Picard MarkDuplicates
+    mark_duplicates = ('java -Xmx4G -jar '
+                       '{0}/picard.jar '
+                       'MarkDuplicates INPUT={1} OUTPUT={2} '
+                       'METRICS_FILE={3} '
+                       'VALIDATION_STRINGENCY=LENIENT '
+                       'ASSUME_SORTED=TRUE '
+                       'REMOVE_DUPLICATES=FALSE '
+                       'VERBOSITY=WARNING '
+                       'QUIET=TRUE').format(os.environ['PICARDROOT'],
+                                            sorted_bam,
+                                            out_file,
+                                            metrics_file)
+    os.system(mark_duplicates)
+
+    # Index the file
+    index_file = 'samtools index {0}'.format(out_file)
+    os.system(index_file)
+
+    # Get the mitochondrial reads that are marked duplicates
+    mito_dups = int(subprocess.check_output(['samtools',
+                                             'view', '-f', '1024',
+                                             '-c', out_file, 'chrM']).strip())
+
+    total_dups = int(subprocess.check_output(['samtools',
+                                              'view', '-f', '1024',
+                                              '-c', out_file]).strip())
+
+    # Clean up
+    remove_bam = 'rm {0}'.format(out_file)
+    os.system(remove_bam)
+    remove_metrics_file = 'rm {0}'.format(metrics_file)
+    os.system(remove_metrics_file)
+
+    return mito_dups, float(mito_dups) / total_dups
+
+
 def get_samtools_flagstat(bam_file):
     '''
     Runs samtools flagstat to get read metrics
@@ -584,6 +630,92 @@ def get_signal_to_noise(final_bed, dnase_regions, blacklist_regions,
     return reads_dnase, fract_dnase, reads_blacklist, fract_blacklist, \
         reads_prom, fract_prom, reads_enh, fract_enh, reads_peaks, \
         fract_peaks
+
+
+def get_region_size_metrics(peak_file):
+    '''
+    From the peak file, return a plot of the region size distribution and
+    the quartile metrics (summary from R)
+    '''
+
+    # If peak file is none, return nothing
+    if peak_file == None:
+        peak_size_summ = OrderedDict([
+            ('Min size', 0),
+            ('25 percentile', 0),
+            ('50 percentile (median)', 0),
+            ('75 percentile', 0),
+            ('Max size', 0),
+            ('Mean', 0),
+        ])
+        return peak_size_summ, ''
+
+    # Load peak file
+    peak_df = pd.read_table(peak_file, compression='gzip', header=None)
+
+    # Subtract third column from second to get summary
+    region_sizes = peak_df.ix[:,2] - peak_df.ix[:,1]
+
+    # Summarize and store in ordered dict
+    peak_summary_stats = region_sizes.describe()
+
+    peak_size_summ = OrderedDict([
+        ('Min size', peak_summary_stats['min']),
+        ('25 percentile', peak_summary_stats['25%']),
+        ('50 percentile (median)', peak_summary_stats['50%']),
+        ('75 percentile', peak_summary_stats['75%']),
+        ('Max size', peak_summary_stats['max']),
+        ('Mean', peak_summary_stats['mean']),
+    ])
+
+    # Plot density diagram using matplotlib
+    fig = plt.figure()
+    ax = fig.add_subplot(111)
+
+    y, binEdges = np.histogram(region_sizes, bins=100)
+    bincenters = 0.5 * (binEdges[1:] + binEdges[:-1])
+
+    # density = gaussian_kde(y) # from scipy.stats import gaussian_kde
+    # density.covariance_factor = lambda : .25
+    # density._compute_covariance()
+
+    plt.plot(bincenters, y, '-')
+    filename = peak_file.split('/')[-1]
+    ax.set_title('Peak width distribution for {0}'.format(filename))
+    #ax.set_yscale('log')
+
+    plot_img = BytesIO()
+    fig.savefig(plot_img, format='png')
+
+    return peak_size_summ, b64encode(plot_img.getvalue())
+
+
+def get_peak_counts(raw_peaks, naive_overlap_peaks=None, idr_peaks=None):
+    '''
+    Return a table with counts for raw peaks, IDR peaks, and naive
+    overlap peaks
+    '''
+
+    # Count peaks
+    raw_count = sum(1 for line in gzip.open(raw_peaks))
+    if naive_overlap_peaks != None:
+        naive_count = sum(1 for line in gzip.open(naive_overlap_peaks))
+    else:
+        naive_count = 0
+
+    if idr_peaks != None:
+        idr_count = sum(1 for line in gzip.open(idr_peaks))
+    else:
+        idr_count = 0
+
+    # Literally just throw these into a QC table
+    results = []
+    results.append(QCGreaterThanEqualCheck('Raw peaks', 10000)(raw_count))
+    results.append(QCGreaterThanEqualCheck('Naive overlap peaks', 
+                                           10000)(naive_count))
+    results.append(QCGreaterThanEqualCheck('IDR peaks', 10000)(idr_count))
+
+    return results
 
 
 def track_reads(reads_list, labels):
@@ -933,6 +1065,58 @@ fragment lengths will arise. Good libraries will show these peaks in a
 fragment length distribution and will show specific peak ratios.
 </pre>
 
+  <h2>Peak statistics</h2>
+  {{ qc_table(sample['peak_counts']) }}
+
+  <h3>Raw peak file statistics</h3>
+  <table class='qc_table'>
+    <tbody>
+      {% for field, value in sample['raw_peak_summ'].iteritems() %}
+      <tr>
+        <td>{{ field }}</td>
+        <td>{{ value }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+
+  {{ inline_img(sample['raw_peak_dist']) }}
+
+  <h3>Naive overlap peak file statistics</h3>
+
+  <table class='qc_table'>
+    <tbody>
+      {% for field, value in sample['naive_peak_summ'].iteritems() %}
+      <tr>
+        <td>{{ field }}</td>
+        <td>{{ value }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+
+  {{ inline_img(sample['naive_peak_dist']) }}
+
+  <h3>IDR peak file statistics</h3>
+
+  <table class='qc_table'>
+    <tbody>
+      {% for field, value in sample['idr_peak_summ'].iteritems() %}
+      <tr>
+        <td>{{ field }}</td>
+        <td>{{ value }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+
+  {{ inline_img(sample['idr_peak_dist']) }}
+
+<pre>
+For a good ATAC-seq experiment in human, you expect to get 100k-200k peaks 
+for a specific cell type.
+</pre>
+
 
   <h2>Sequence quality metrics</h2>
   <h3>GC bias</h3>
@@ -1045,6 +1229,10 @@ def parse_args():
                         help='Final bigwig')
     parser.add_argument('--peaks',
                         help='Peak file')
+    parser.add_argument('--naive_overlap_peaks',
+                        default=None, help='Naive overlap peak file')
+    parser.add_argument('--idr_peaks',
+                        default=None, help='IDR peak file')
 
     args = parser.parse_args()
 
@@ -1091,11 +1279,13 @@ def parse_args():
         FINAL_BED = args.finalbed
         BIGWIG = args.bigwig
         PEAKS = args.peaks
+        NAIVE_OVERLAP_PEAKS = args.naive_overlap_peaks
+        IDR_PEAKS = args.idr_peaks
 
     return NAME, OUTPUT_PREFIX, REF, TSS, DNASE, BLACKLIST, PROM, ENH, \
         REG2MAP, ROADMAP_META, GENOME, FASTQ, ALIGNED_BAM, \
         ALIGNMENT_LOG, COORDSORT_BAM, DUP_LOG, PBC_LOG, FINAL_BAM, \
-        FINAL_BED, BIGWIG, PEAKS
+        FINAL_BED, BIGWIG, PEAKS, NAIVE_OVERLAP_PEAKS, IDR_PEAKS
 
 
 def main():
@@ -1103,7 +1293,8 @@ def main():
     # Parse args
     [NAME, OUTPUT_PREFIX, REF, TSS, DNASE, BLACKLIST, PROM, ENH, REG2MAP,
      ROADMAP_META, GENOME, FASTQ, ALIGNED_BAM, ALIGNMENT_LOG, COORDSORT_BAM,
-     DUP_LOG, PBC_LOG, FINAL_BAM, FINAL_BED, BIGWIG, PEAKS] = parse_args()
+     DUP_LOG, PBC_LOG, FINAL_BAM, FINAL_BED, BIGWIG, PEAKS,
+     NAIVE_OVERLAP_PEAKS, IDR_PEAKS] = parse_args()
 
     # Set up the log file and timing
     logging.basicConfig(filename='test.log', level=logging.DEBUG)
@@ -1134,6 +1325,8 @@ def main():
     # Filtering metrics: duplicates, map quality
     num_mapq, fract_mapq = get_fract_mapq(ALIGNED_BAM)
     read_dups, percent_dup = get_picard_dup_stats(DUP_LOG, paired_status)
+    mito_dups, fract_dups_from_mito = get_mito_dups(COORDSORT_BAM,
+                                                    OUTPUT_PREFIX)
     [flagstat, mapped_count] = get_samtools_flagstat(ALIGNED_BAM)
 
     # Final read statistics
@@ -1173,6 +1366,12 @@ def main():
     else:
         nucleosomal_qc = ''
 
+    # Peak metrics
+    peak_counts = get_peak_counts(PEAKS, NAIVE_OVERLAP_PEAKS, IDR_PEAKS)
+    raw_peak_summ, raw_peak_dist = get_region_size_metrics(PEAKS)
+    naive_peak_summ, naive_peak_dist = get_region_size_metrics(NAIVE_OVERLAP_PEAKS)
+    idr_peak_summ, idr_peak_dist = get_region_size_metrics(IDR_PEAKS)
+
     # Compare to roadmap
     roadmap_compare_plot = compare_to_roadmap(BIGWIG, DNASE, REG2MAP,
                                               ROADMAP_META, OUTPUT_PREFIX)
@@ -1207,6 +1406,8 @@ def main():
         ('Mapping quality > q30 (out of total)', (num_mapq, fract_mapq)),
         ('Duplicates (after filtering)', (read_dups, percent_dup)),
         ('Mitochondrial reads (out of total)', (chr_m_reads, fraction_chr_m)),
+        ('Duplicates that are mitochondrial (out of all dups)', 
+            (mito_dups, fract_dups_from_mito)),
         ('Final reads (after all filters)', (final_read_count,
                                              fract_reads_left)),
     ])
@@ -1250,6 +1451,15 @@ def main():
         ('fraglen_dist', fragment_length_plot(insert_data)),
         ('nucleosomal', nucleosomal_qc),
 
+        # Peak metrics
+        ('peak_counts', peak_counts),
+        ('raw_peak_summ', raw_peak_summ),
+        ('naive_peak_summ', naive_peak_summ),
+        ('idr_peak_summ', idr_peak_summ),
+        ('raw_peak_dist', raw_peak_dist),
+        ('naive_peak_dist', naive_peak_dist),
+        ('idr_peak_dist', idr_peak_dist),
+
         # GC
         ('gc_bias', plot_gc(gc_out)),
 
@@ -1288,6 +1498,8 @@ def main():
                     textfile.write('{0}\t{1}\n'.format(dict_key, dict_value))
         # QC tables go here
         elif isinstance(value, list):
+            if 'bowtie' in value[0]: # Hack, fix this
+                continue
             for result in value:
                 textfile.write('{0}\t{1}\n'.format(result.metric,
                                                    result.message))
