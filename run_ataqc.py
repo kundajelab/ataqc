@@ -638,20 +638,24 @@ def get_region_size_metrics(peak_file):
     the quartile metrics (summary from R)
     '''
 
+    peak_size_summ = OrderedDict([
+        ('Min size', 0),
+        ('25 percentile', 0),
+        ('50 percentile (median)', 0),
+        ('75 percentile', 0),
+        ('Max size', 0),
+        ('Mean', 0),
+    ])
+
     # If peak file is none, return nothing
     if peak_file == None:
-        peak_size_summ = OrderedDict([
-            ('Min size', 0),
-            ('25 percentile', 0),
-            ('50 percentile (median)', 0),
-            ('75 percentile', 0),
-            ('Max size', 0),
-            ('Mean', 0),
-        ])
         return peak_size_summ, ''
 
-    # Load peak file
-    peak_df = pd.read_table(peak_file, compression='gzip', header=None)
+    # Load peak file. If it fails, return nothing as above
+    try:
+        peak_df = pd.read_table(peak_file, compression='gzip', header=None)
+    except:
+        return peak_size_summ, ''
 
     # Subtract third column from second to get summary
     region_sizes = peak_df.ix[:,2] - peak_df.ix[:,1]
