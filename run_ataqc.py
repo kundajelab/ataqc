@@ -176,7 +176,7 @@ def get_gc(qsorted_bam_file, reference_fasta, prefix):
     get_gc_metrics = ('java -Xmx4G -jar '
                       '{5}/picard.jar '
                       'CollectGcBiasMetrics R={0} I={1} O={2} '
-                      'VERBOSITY=WARNING QUIET=TRUE '
+                      'VERBOSITY=ERROR QUIET=TRUE '
                       'ASSUME_SORTED=FALSE '
                       'CHART={3} S={4}').format(reference_fasta,
                                                 qsorted_bam_file,
@@ -310,7 +310,7 @@ def get_picard_complexity_metrics(aligned_bam, prefix):
     get_gc_metrics = ('java -Xmx4G -jar '
                       '{2}/picard.jar '
                       'EstimateLibraryComplexity INPUT={0} OUTPUT={1} '
-                      'VERBOSITY=WARNING '
+                      'VERBOSITY=ERROR '
                       'QUIET=TRUE').format(aligned_bam,
                                            out_file,
                                            os.environ['PICARDROOT'])
@@ -481,7 +481,7 @@ def get_mito_dups(sorted_bam, prefix):
                        'VALIDATION_STRINGENCY=LENIENT '
                        'ASSUME_SORTED=TRUE '
                        'REMOVE_DUPLICATES=FALSE '
-                       'VERBOSITY=WARNING '
+                       'VERBOSITY=ERROR '
                        'QUIET=TRUE').format(os.environ['PICARDROOT'],
                                             sorted_bam,
                                             out_file,
@@ -572,7 +572,7 @@ def get_insert_distribution(final_bam, prefix):
                          '{3}/picard.jar '
                          'CollectInsertSizeMetrics '
                          'INPUT={0} OUTPUT={1} H={2} '
-                         'VERBOSITY=WARNING QUIET=TRUE '
+                         'VERBOSITY=ERROR QUIET=TRUE '
                          'W=1000 STOP_AFTER=5000000').format(final_bam,
                                                              insert_data,
                                                              insert_plot,
