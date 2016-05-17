@@ -260,9 +260,9 @@ def get_encode_complexity_measures(pbc_output):
     with open(pbc_output, 'rb') as fp:
         for line in fp:
             l_list = line.strip().split('\t')
-            NRF = l_list[4]
-            PBC1 = l_list[5]
-            PBC2 = l_list[6]
+            NRF = float(l_list[4])
+            PBC1 = float(l_list[5])
+            PBC2 = float(l_list[6])
             break
 
     # QC check
