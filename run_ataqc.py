@@ -151,7 +151,7 @@ def get_chr_m(sorted_bam_file):
     Get fraction of reads that are mitochondrial (chr M).
     '''
     logging.info('Getting mitochondrial chromosome fraction...')
-    chrom_list = pysam.idxstats(sorted_bam_file)
+    chrom_list = pysam.idxstats(sorted_bam_file, split_lines=True)
     tot_reads = 0
     for chrom in chrom_list:
         chrom_stats = chrom.split('\t')
