@@ -30,6 +30,7 @@ from io import BytesIO
 from scipy.signal import find_peaks_cwt
 from jinja2 import Template
 from matplotlib import pyplot as plt
+from matplotlib import mlab
 
 
 # QC STUFF
@@ -360,7 +361,7 @@ def preseq_plot(data_file):
     return b64encode(plot_img.getvalue())
 
 
-def make_vplot(bam_file, tss, prefix, genome, read_len, bins=400, bp_edge=2000, 
+def make_vplot(bam_file, tss, prefix, genome, read_len, bins=400, bp_edge=2000,
                processes=8, greenleaf_norm=True):
     '''
     Take bootstraps, generate V-plots, and get a mean and
@@ -420,11 +421,17 @@ def make_vplot(bam_file, tss, prefix, genome, read_len, bins=400, bp_edge=2000,
     fig.savefig(vplot_file)
 
     # Print a more complicated plot with lots of info
+
+    # Find a safe upper percentile - we can't use X if the Xth percentile is 0
+    upper_prct = 99
+    if mlab.prctile(bam_array.ravel(), upper_prct) == 0.0:
+        upper_prct = 100.0
+
     plt.rcParams['font.size'] = 8
     fig = metaseq.plotutils.imshow(bam_array,
                                    x=x,
                                    figsize=(5, 10),
-                                   vmin=5, vmax=99, percentile=True,
+                                   vmin=5, vmax=upper_prct, percentile=True,
                                    line_kwargs=dict(color='k', label='All'),
                                    fill_kwargs=dict(color='k', alpha=0.3),
                                    sort_by=bam_array.mean(axis=1))
@@ -452,7 +459,7 @@ def get_picard_dup_stats(picard_dup_file, paired_status):
             if mark == 2:
                 line_elems = line.strip().split('\t')
                 dup_stats['PERCENT_DUPLICATION'] = line_elems[7]
-                dup_stats['READ_PAIR_DUPLICATES'] = line_elems[5] 
+                dup_stats['READ_PAIR_DUPLICATES'] = line_elems[5]
                 dup_stats['READ_PAIRS_EXAMINED'] = line_elems[2]
                 if paired_status == 'Paired-ended':
                     return float(line_elems[5]), float(line_elems[7])
@@ -471,7 +478,14 @@ def get_mito_dups(sorted_bam, prefix):
     '''
 
     out_file = '{0}.dupmark.ataqc.bam'.format(prefix)
-    metrics_file = '{0}.dup.ataqc'
+    metrics_file = '{0}.dup.ataqc'.format(prefix)
+
+    # Filter bam on the flag 0x002
+    tmp_filtered_bam = '{0}.filt.bam'.format(prefix)
+    tmp_filtered_bam_prefix = tmp_filtered_bam.replace('.bam', '')
+    filter_bam = ('samtools view -F 1804 -f 2 -u {0} | '
+                  'samtools sort - {1}'.format(sorted_bam, tmp_filtered_bam_prefix))
+    os.system(filter_bam)
 
     # Run Picard MarkDuplicates
     mark_duplicates = ('java -Xmx4G -jar '
@@ -483,7 +497,7 @@ def get_mito_dups(sorted_bam, prefix):
                        'REMOVE_DUPLICATES=FALSE '
                        'VERBOSITY=ERROR '
                        'QUIET=TRUE').format(os.environ['PICARDROOT'],
-                                            sorted_bam,
+                                            tmp_filtered_bam,
                                             out_file,
                                             metrics_file)
     os.system(mark_duplicates)
@@ -506,6 +520,8 @@ def get_mito_dups(sorted_bam, prefix):
     os.system(remove_bam)
     remove_metrics_file = 'rm {0}'.format(metrics_file)
     os.system(remove_metrics_file)
+    remove_tmp_filtered_bam = 'rm {0}'.format(tmp_filtered_bam)
+    os.system(remove_tmp_filtered_bam)
 
     return mito_dups, float(mito_dups) / total_dups
 
@@ -715,7 +731,7 @@ def get_peak_counts(raw_peaks, naive_overlap_peaks=None, idr_peaks=None):
     # Literally just throw these into a QC table
     results = []
     results.append(QCGreaterThanEqualCheck('Raw peaks', 10000)(raw_count))
-    results.append(QCGreaterThanEqualCheck('Naive overlap peaks', 
+    results.append(QCGreaterThanEqualCheck('Naive overlap peaks',
                                            10000)(naive_count))
     results.append(QCGreaterThanEqualCheck('IDR peaks', 10000)(idr_count))
 
@@ -791,7 +807,7 @@ def fragment_length_plot(data_file, peaks=None):
     except IOError:
         return ''
     except TypeError:
-        return '' 
+        return ''
 
     fig = plt.figure()
     plt.bar(data[:, 0], data[:, 1])
@@ -1117,7 +1133,7 @@ fragment length distribution and will show specific peak ratios.
   {{ inline_img(sample['idr_peak_dist']) }}
 
 <pre>
-For a good ATAC-seq experiment in human, you expect to get 100k-200k peaks 
+For a good ATAC-seq experiment in human, you expect to get 100k-200k peaks
 for a specific cell type.
 </pre>
 
@@ -1410,7 +1426,7 @@ def main():
         ('Mapping quality > q30 (out of total)', (num_mapq, fract_mapq)),
         ('Duplicates (after filtering)', (read_dups, percent_dup)),
         ('Mitochondrial reads (out of total)', (chr_m_reads, fraction_chr_m)),
-        ('Duplicates that are mitochondrial (out of all dups)', 
+        ('Duplicates that are mitochondrial (out of all dups)',
             (mito_dups, fract_dups_from_mito)),
         ('Final reads (after all filters)', (final_read_count,
                                              fract_reads_left)),
