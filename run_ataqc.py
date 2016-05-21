@@ -1329,7 +1329,7 @@ def main():
     # Filtering metrics: duplicates, map quality
     num_mapq, fract_mapq = get_fract_mapq(ALIGNED_BAM)
     read_dups, percent_dup = get_picard_dup_stats(DUP_LOG, paired_status)
-    mito_dups, fract_dups_from_mito = get_mito_dups(COORDSORT_BAM,
+    mito_dups, fract_dups_from_mito = get_mito_dups(ALIGNED_BAM,
                                                     OUTPUT_PREFIX)
     [flagstat, mapped_count] = get_samtools_flagstat(ALIGNED_BAM)
 
