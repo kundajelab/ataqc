@@ -22,6 +22,7 @@ import pandas as pd
 import scipy.stats
 import argparse
 import logging
+import re
 
 from base64 import b64encode
 from collections import namedtuple
@@ -94,6 +95,16 @@ class QCHasElementInRange(QCCheck):
                 'Cannot find element in range [{}, {}]'.format(
                     self.lower, self.upper))
 
+# HELPER FUNCTIONS
+
+def getFileHandle(filename, mode="r"):
+    if (re.search('.gz$',filename) or re.search('.gzip',filename)):
+        if (mode=="r"):
+            mode="rb";
+        return gzip.open(filename,mode)
+    else:
+        return open(filename,mode)
+
 
 # QC FUNCTIONS
 
@@ -118,7 +129,7 @@ def get_read_length(fastq_file):
     line_num = 0
     total_reads_considered = 0
     max_length = 0
-    with gzip.open(fastq_file, 'rb') as fp:
+    with getFileHandle(fastq_file, 'rb') as fp:
         for line in fp:
             if line_num % 4 == 1:
                 if len(line.strip()) > max_length:
@@ -701,14 +712,14 @@ def get_peak_counts(raw_peaks, naive_overlap_peaks=None, idr_peaks=None):
     '''
 
     # Count peaks
-    raw_count = sum(1 for line in gzip.open(raw_peaks))
+    raw_count = sum(1 for line in getFileHandle(raw_peaks))
     if naive_overlap_peaks != None:
-        naive_count = sum(1 for line in gzip.open(naive_overlap_peaks))
+        naive_count = sum(1 for line in getFileHandle(naive_overlap_peaks))
     else:
         naive_count = 0
 
     if idr_peaks != None:
-        idr_count = sum(1 for line in gzip.open(idr_peaks))
+        idr_count = sum(1 for line in getFileHandle(idr_peaks))
     else:
         idr_count = 0
 
