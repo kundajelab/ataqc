@@ -31,6 +31,7 @@ from io import BytesIO
 from scipy.signal import find_peaks_cwt
 from jinja2 import Template
 from matplotlib import pyplot as plt
+from matplotlib import mlab
 
 
 # QC STUFF
@@ -371,7 +372,7 @@ def preseq_plot(data_file):
     return b64encode(plot_img.getvalue())
 
 
-def make_vplot(bam_file, tss, prefix, genome, read_len, bins=400, bp_edge=2000, 
+def make_vplot(bam_file, tss, prefix, genome, read_len, bins=400, bp_edge=2000,
                processes=8, greenleaf_norm=True):
     '''
     Take bootstraps, generate V-plots, and get a mean and
@@ -431,11 +432,17 @@ def make_vplot(bam_file, tss, prefix, genome, read_len, bins=400, bp_edge=2000,
     fig.savefig(vplot_file)
 
     # Print a more complicated plot with lots of info
+
+    # Find a safe upper percentile - we can't use X if the Xth percentile is 0
+    upper_prct = 99
+    if mlab.prctile(bam_array.ravel(), upper_prct) == 0.0:
+        upper_prct = 100.0
+
     plt.rcParams['font.size'] = 8
     fig = metaseq.plotutils.imshow(bam_array,
                                    x=x,
                                    figsize=(5, 10),
-                                   vmin=5, vmax=99, percentile=True,
+                                   vmin=5, vmax=upper_prct, percentile=True,
                                    line_kwargs=dict(color='k', label='All'),
                                    fill_kwargs=dict(color='k', alpha=0.3),
                                    sort_by=bam_array.mean(axis=1))
@@ -463,7 +470,7 @@ def get_picard_dup_stats(picard_dup_file, paired_status):
             if mark == 2:
                 line_elems = line.strip().split('\t')
                 dup_stats['PERCENT_DUPLICATION'] = line_elems[7]
-                dup_stats['READ_PAIR_DUPLICATES'] = line_elems[5] 
+                dup_stats['READ_PAIR_DUPLICATES'] = line_elems[5]
                 dup_stats['READ_PAIRS_EXAMINED'] = line_elems[2]
                 if paired_status == 'Paired-ended':
                     return float(line_elems[5]), float(line_elems[7])
@@ -475,14 +482,44 @@ def get_picard_dup_stats(picard_dup_file, paired_status):
     return None
 
 
-def get_mito_dups(sorted_bam, prefix):
+def get_sambamba_dup_stats(sambamba_dup_file, paired_status):
+    '''
+    Parse sambamba markdup's metrics file
+    '''
+    logging.info('Running sambamba markdup...')
+    with open(sambamba_dup_file, 'r') as fp:
+        lines = fp.readlines()
+
+    end_pairs = int(lines[1].strip().split()[1])
+    single_ends = int(lines[2].strip().split()[1])
+    ends_marked_dup = int(lines[4].strip().split()[1])
+    if paired_status == 'Paired-ended':
+        pairs_marked_dup = 0.5 * float(ends_marked_dup)
+        prct_dup = pairs_marked_dup / float(end_pairs)
+        return pairs_marked_dup, prct_dup
+    else:
+        prct_dup = float(ends_marked_dup) / float(single_ends)
+        return ends_marked_dup, prct_dup
+
+
+def get_mito_dups(sorted_bam, prefix, use_sambamba=False):
     '''
     Marks duplicates in the original aligned bam file and then determines
     how many reads are duplicates AND from chrM
+
+    To use sambamba markdup instead of picard MarkDuplicates, set
+    use_sambamba to True (default False).
     '''
 
     out_file = '{0}.dupmark.ataqc.bam'.format(prefix)
-    metrics_file = '{0}.dup.ataqc'
+    metrics_file = '{0}.dup.ataqc'.format(prefix)
+
+    # Filter bam on the flag 0x002
+    tmp_filtered_bam = '{0}.filt.bam'.format(prefix)
+    tmp_filtered_bam_prefix = tmp_filtered_bam.replace('.bam', '')
+    filter_bam = ('samtools view -F 1804 -f 2 -u {0} | '
+                  'samtools sort - {1}'.format(sorted_bam, tmp_filtered_bam_prefix))
+    os.system(filter_bam)
 
     # Run Picard MarkDuplicates
     mark_duplicates = ('java -Xmx4G -jar '
@@ -494,7 +531,17 @@ def get_mito_dups(sorted_bam, prefix):
                        'REMOVE_DUPLICATES=FALSE '
                        'VERBOSITY=ERROR '
                        'QUIET=TRUE').format(os.environ['PICARDROOT'],
-                                            sorted_bam,
+                                            tmp_filtered_bam,
+                                            out_file,
+                                            metrics_file)
+    if use_sambamba:
+        mark_duplicates = ('sambamba markdup -t 8 '
+                           '--hash-table-size=17592186044416 '
+                           '--overflow-list-size=20000000 '
+                           '--io-buffer-size=256 '
+                           '{0} '
+                           '{1} '
+                           '2> {2}').format(tmp_filtered_bam,
                                             out_file,
                                             metrics_file)
     os.system(mark_duplicates)
@@ -517,6 +564,8 @@ def get_mito_dups(sorted_bam, prefix):
     os.system(remove_bam)
     remove_metrics_file = 'rm {0}'.format(metrics_file)
     os.system(remove_metrics_file)
+    remove_tmp_filtered_bam = 'rm {0}'.format(tmp_filtered_bam)
+    os.system(remove_tmp_filtered_bam)
 
     return mito_dups, float(mito_dups) / total_dups
 
@@ -726,7 +775,7 @@ def get_peak_counts(raw_peaks, naive_overlap_peaks=None, idr_peaks=None):
     # Literally just throw these into a QC table
     results = []
     results.append(QCGreaterThanEqualCheck('Raw peaks', 10000)(raw_count))
-    results.append(QCGreaterThanEqualCheck('Naive overlap peaks', 
+    results.append(QCGreaterThanEqualCheck('Naive overlap peaks',
                                            10000)(naive_count))
     results.append(QCGreaterThanEqualCheck('IDR peaks', 10000)(idr_count))
 
@@ -802,7 +851,7 @@ def fragment_length_plot(data_file, peaks=None):
     except IOError:
         return ''
     except TypeError:
-        return '' 
+        return ''
 
     fig = plt.figure()
     plt.bar(data[:, 0], data[:, 1])
@@ -1128,7 +1177,7 @@ fragment length distribution and will show specific peak ratios.
   {{ inline_img(sample['idr_peak_dist']) }}
 
 <pre>
-For a good ATAC-seq experiment in human, you expect to get 100k-200k peaks 
+For a good ATAC-seq experiment in human, you expect to get 100k-200k peaks
 for a specific cell type.
 </pre>
 
@@ -1248,6 +1297,8 @@ def parse_args():
                         default=None, help='Naive overlap peak file')
     parser.add_argument('--idr_peaks',
                         default=None, help='IDR peak file')
+    parser.add_argument('--use_sambamba_markdup', action='store_true',
+                        help='Use sambamba markdup instead of Picard')
 
     args = parser.parse_args()
 
@@ -1296,11 +1347,13 @@ def parse_args():
         PEAKS = args.peaks
         NAIVE_OVERLAP_PEAKS = args.naive_overlap_peaks
         IDR_PEAKS = args.idr_peaks
+        USE_SAMBAMBA_MARKDUP = args.use_sambamba_markdup
 
     return NAME, OUTPUT_PREFIX, REF, TSS, DNASE, BLACKLIST, PROM, ENH, \
         REG2MAP, ROADMAP_META, GENOME, FASTQ, ALIGNED_BAM, \
         ALIGNMENT_LOG, COORDSORT_BAM, DUP_LOG, PBC_LOG, FINAL_BAM, \
-        FINAL_BED, BIGWIG, PEAKS, NAIVE_OVERLAP_PEAKS, IDR_PEAKS
+        FINAL_BED, BIGWIG, PEAKS, NAIVE_OVERLAP_PEAKS, IDR_PEAKS, \
+        USE_SAMBAMBA_MARKDUP
 
 
 def main():
@@ -1309,7 +1362,7 @@ def main():
     [NAME, OUTPUT_PREFIX, REF, TSS, DNASE, BLACKLIST, PROM, ENH, REG2MAP,
      ROADMAP_META, GENOME, FASTQ, ALIGNED_BAM, ALIGNMENT_LOG, COORDSORT_BAM,
      DUP_LOG, PBC_LOG, FINAL_BAM, FINAL_BED, BIGWIG, PEAKS,
-     NAIVE_OVERLAP_PEAKS, IDR_PEAKS] = parse_args()
+     NAIVE_OVERLAP_PEAKS, IDR_PEAKS, USE_SAMBAMBA_MARKDUP] = parse_args()
 
     # Set up the log file and timing
     logging.basicConfig(filename='test.log', level=logging.DEBUG)
@@ -1339,9 +1392,15 @@ def main():
 
     # Filtering metrics: duplicates, map quality
     num_mapq, fract_mapq = get_fract_mapq(ALIGNED_BAM)
-    read_dups, percent_dup = get_picard_dup_stats(DUP_LOG, paired_status)
+
+    if USE_SAMBAMBA_MARKDUP:
+        read_dups, percent_dup = get_sambamba_dup_stats(DUP_LOG, paired_status)
+    else:
+        read_dups, percent_dup = get_picard_dup_stats(DUP_LOG, paired_status)
+
     mito_dups, fract_dups_from_mito = get_mito_dups(ALIGNED_BAM,
-                                                    OUTPUT_PREFIX)
+                                                    OUTPUT_PREFIX,
+                                                    use_sambamba=USE_SAMBAMBA_MARKDUP)
     [flagstat, mapped_count] = get_samtools_flagstat(ALIGNED_BAM)
 
     # Final read statistics
@@ -1421,7 +1480,7 @@ def main():
         ('Mapping quality > q30 (out of total)', (num_mapq, fract_mapq)),
         ('Duplicates (after filtering)', (read_dups, percent_dup)),
         ('Mitochondrial reads (out of total)', (chr_m_reads, fraction_chr_m)),
-        ('Duplicates that are mitochondrial (out of all dups)', 
+        ('Duplicates that are mitochondrial (out of all dups)',
             (mito_dups, fract_dups_from_mito)),
         ('Final reads (after all filters)', (final_read_count,
                                              fract_reads_left)),
