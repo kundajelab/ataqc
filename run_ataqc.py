@@ -502,7 +502,7 @@ def get_sambamba_dup_stats(sambamba_dup_file, paired_status):
         return ends_marked_dup, prct_dup
 
 
-def get_mito_dups(sorted_bam, prefix, use_sambamba=False):
+def get_mito_dups(sorted_bam, prefix, endedness='Paired-ended', use_sambamba=False):
     '''
     Marks duplicates in the original aligned bam file and then determines
     how many reads are duplicates AND from chrM
@@ -517,8 +517,12 @@ def get_mito_dups(sorted_bam, prefix, use_sambamba=False):
     # Filter bam on the flag 0x002
     tmp_filtered_bam = '{0}.filt.bam'.format(prefix)
     tmp_filtered_bam_prefix = tmp_filtered_bam.replace('.bam', '')
-    filter_bam = ('samtools view -F 1804 -f 2 -u {0} | '
-                  'samtools sort - {1}'.format(sorted_bam, tmp_filtered_bam_prefix))
+    if endedness == 'Paired-ended':
+        filter_bam = ('samtools view -F 1804 -f 2 -u {0} | '
+                      'samtools sort - {1}'.format(sorted_bam, tmp_filtered_bam_prefix))
+    else:
+        filter_bam = ('samtools view -F 1804 -u {0} | '
+                      'samtools sort - {1}'.format(sorted_bam, tmp_filtered_bam_prefix))
     os.system(filter_bam)
 
     # Run Picard MarkDuplicates
@@ -1400,6 +1404,7 @@ def main():
 
     mito_dups, fract_dups_from_mito = get_mito_dups(ALIGNED_BAM,
                                                     OUTPUT_PREFIX,
+                                                    paired_status,
                                                     use_sambamba=USE_SAMBAMBA_MARKDUP)
     [flagstat, mapped_count] = get_samtools_flagstat(ALIGNED_BAM)
 
