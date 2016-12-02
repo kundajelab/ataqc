@@ -1266,6 +1266,7 @@ def parse_args():
     parser.add_argument('--blacklist', help='Blacklisted region file')
     parser.add_argument('--prom', help='Promoter region file')
     parser.add_argument('--enh', help='Enhancer region file')
+    parser.add_argument('--reg2map_bed', help='file of regions used to generate reg2map signals')
     parser.add_argument('--reg2map', help='file with cell type signals')
     parser.add_argument('--meta', help='Roadmap metadata')
 
@@ -1320,6 +1321,7 @@ def parse_args():
     BLACKLIST = args.blacklist
     PROM = args.prom
     ENH = args.enh
+    REG2MAP_BED = args.reg2map_bed
     REG2MAP = args.reg2map
     ROADMAP_META = args.meta
 
@@ -1354,7 +1356,7 @@ def parse_args():
         USE_SAMBAMBA_MARKDUP = args.use_sambamba_markdup
 
     return NAME, OUTPUT_PREFIX, REF, TSS, DNASE, BLACKLIST, PROM, ENH, \
-        REG2MAP, ROADMAP_META, GENOME, FASTQ, ALIGNED_BAM, \
+        REG2MAP_BED, REG2MAP, ROADMAP_META, GENOME, FASTQ, ALIGNED_BAM, \
         ALIGNMENT_LOG, COORDSORT_BAM, DUP_LOG, PBC_LOG, FINAL_BAM, \
         FINAL_BED, BIGWIG, PEAKS, NAIVE_OVERLAP_PEAKS, IDR_PEAKS, \
         USE_SAMBAMBA_MARKDUP
@@ -1363,7 +1365,7 @@ def parse_args():
 def main():
 
     # Parse args
-    [NAME, OUTPUT_PREFIX, REF, TSS, DNASE, BLACKLIST, PROM, ENH, REG2MAP,
+    [NAME, OUTPUT_PREFIX, REF, TSS, DNASE, BLACKLIST, PROM, ENH, REG2MAP_BED, REG2MAP,
      ROADMAP_META, GENOME, FASTQ, ALIGNED_BAM, ALIGNMENT_LOG, COORDSORT_BAM,
      DUP_LOG, PBC_LOG, FINAL_BAM, FINAL_BED, BIGWIG, PEAKS,
      NAIVE_OVERLAP_PEAKS, IDR_PEAKS, USE_SAMBAMBA_MARKDUP] = parse_args()
@@ -1452,7 +1454,7 @@ def main():
     idr_peak_summ, idr_peak_dist = get_region_size_metrics(IDR_PEAKS)
 
     # Compare to roadmap
-    roadmap_compare_plot = compare_to_roadmap(BIGWIG, DNASE, REG2MAP,
+    roadmap_compare_plot = compare_to_roadmap(BIGWIG, REG2MAP_BED, REG2MAP,
                                               ROADMAP_META, OUTPUT_PREFIX)
 
     # Finally output the bar chart of reads
