@@ -654,7 +654,7 @@ def get_fract_reads_in_regions(reads_bed, regions_bed):
     reads_bedtool = pybedtools.BedTool(reads_bed)
     regions_bedtool = pybedtools.BedTool(regions_bed)
 
-    reads = regions_bedtool.sort().merge().intersect(reads_bedtool, c=True)
+    reads = regions_bedtool.sort().merge().intersect(reads_bedtool, c=True, nonamecheck=True)
 
     read_count = 0
     for interval in reads:
