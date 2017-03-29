@@ -372,7 +372,7 @@ def preseq_plot(data_file):
     return b64encode(plot_img.getvalue())
 
 
-def make_vplot(bam_file, tss, prefix, genome, read_len, bins=400, bp_edge=2000,
+def make_vplot(bam_file, tss, prefix, chromsizes, read_len, bins=400, bp_edge=2000,
                processes=8, greenleaf_norm=True):
     '''
     Take bootstraps, generate V-plots, and get a mean and
@@ -386,7 +386,7 @@ def make_vplot(bam_file, tss, prefix, genome, read_len, bins=400, bp_edge=2000,
 
     # Load the TSS file
     tss = pybedtools.BedTool(tss)
-    tss_ext = tss.slop(b=bp_edge, genome=genome)
+    tss_ext = tss.slop(b=bp_edge, g=chromsizes)
 
     # Load the bam file
     bam = metaseq.genomic_signal(bam_file, 'bam') # Need to shift reads and just get ends, just load bed file?
@@ -1260,6 +1260,7 @@ def parse_args():
 
     # Annotation files
     parser.add_argument('--genome', help='Genome build used')
+    parser.add_argument('--chromsizes', help='chromsizes file')
     parser.add_argument('--ref', help='Reference fasta file')
     parser.add_argument('--tss', help='TSS file')
     parser.add_argument('--dnase', help='Open chromatin region file')
@@ -1315,6 +1316,7 @@ def parse_args():
 
     # Set up annotations
     GENOME = args.genome
+    CHROMSIZES = args.chromsizes
     REF = args.ref
     TSS = args.tss
     DNASE = args.dnase
@@ -1356,7 +1358,7 @@ def parse_args():
         USE_SAMBAMBA_MARKDUP = args.use_sambamba_markdup
 
     return NAME, OUTPUT_PREFIX, REF, TSS, DNASE, BLACKLIST, PROM, ENH, \
-        REG2MAP_BED, REG2MAP, ROADMAP_META, GENOME, FASTQ, ALIGNED_BAM, \
+        REG2MAP_BED, REG2MAP, ROADMAP_META, GENOME, CHROMSIZES, FASTQ, ALIGNED_BAM, \
         ALIGNMENT_LOG, COORDSORT_BAM, DUP_LOG, PBC_LOG, FINAL_BAM, \
         FINAL_BED, BIGWIG, PEAKS, NAIVE_OVERLAP_PEAKS, IDR_PEAKS, \
         USE_SAMBAMBA_MARKDUP
@@ -1366,7 +1368,7 @@ def main():
 
     # Parse args
     [NAME, OUTPUT_PREFIX, REF, TSS, DNASE, BLACKLIST, PROM, ENH, REG2MAP_BED, REG2MAP,
-     ROADMAP_META, GENOME, FASTQ, ALIGNED_BAM, ALIGNMENT_LOG, COORDSORT_BAM,
+     ROADMAP_META, GENOME, CHROMSIZES, FASTQ, ALIGNED_BAM, ALIGNMENT_LOG, COORDSORT_BAM,
      DUP_LOG, PBC_LOG, FINAL_BAM, FINAL_BED, BIGWIG, PEAKS,
      NAIVE_OVERLAP_PEAKS, IDR_PEAKS, USE_SAMBAMBA_MARKDUP] = parse_args()
 
@@ -1427,7 +1429,7 @@ def main():
     vplot_file, vplot_large_file, tss_point_val = make_vplot(FINAL_BAM, # Use final to avoid duplicates
                                                              TSS,
                                                              OUTPUT_PREFIX,
-                                                             GENOME,
+                                                             CHROMSIZES,
                                                              read_len)
 
     # Signal to noise: reads in DHS regions vs not, reads falling
