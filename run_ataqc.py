@@ -372,17 +372,17 @@ def preseq_plot(data_file):
     return b64encode(plot_img.getvalue())
 
 
-def make_vplot(bam_file, tss, prefix, chromsizes, read_len, bins=400, bp_edge=2000,
-               processes=8, greenleaf_norm=True):
+def make_tss_plot(bam_file, tss, prefix, chromsizes, read_len, bins=400, bp_edge=2000,
+                  processes=8, greenleaf_norm=True):
     '''
-    Take bootstraps, generate V-plots, and get a mean and
+    Take bootstraps, generate tss plots, and get a mean and
     standard deviation on the plot. Produces 2 plots. One is the
     aggregation plot alone, while the other also shows the signal
     at each TSS ordered by strength.
     '''
-    logging.info('Generating vplot...')
-    vplot_file = '{0}_vplot.png'.format(prefix)
-    vplot_large_file = '{0}_large_vplot.png'.format(prefix)
+    logging.info('Generating tss plot...')
+    tss_plot_file = '{0}_tss-enrich.png'.format(prefix)
+    tss_plot_large_file = '{0}_large_tss-enrich.png'.format(prefix)
 
     # Load the TSS file
     tss = pybedtools.BedTool(tss)
@@ -429,7 +429,7 @@ def make_vplot(bam_file, tss, prefix, chromsizes, read_len, bins=400, bp_edge=20
     ax.set_ylabel('Average read coverage (per million mapped reads)')
     ax.legend(loc='best')
 
-    fig.savefig(vplot_file)
+    fig.savefig(tss_plot_file)
 
     # Print a more complicated plot with lots of info
 
@@ -448,9 +448,9 @@ def make_vplot(bam_file, tss, prefix, chromsizes, read_len, bins=400, bp_edge=20
                                    sort_by=bam_array.mean(axis=1))
 
     # And save the file
-    fig.savefig(vplot_large_file)
+    fig.savefig(tss_plot_large_file)
 
-    return vplot_file, vplot_large_file, tss_point_val
+    return tss_plot_file, tss_plot_large_file, tss_point_val
 
 
 def get_picard_dup_stats(picard_dup_file, paired_status):
@@ -1426,11 +1426,11 @@ def main():
         insert_plot = ''
 
     # Enrichments: V plot for enrichment
-    vplot_file, vplot_large_file, tss_point_val = make_vplot(FINAL_BAM, # Use final to avoid duplicates
-                                                             TSS,
-                                                             OUTPUT_PREFIX,
-                                                             CHROMSIZES,
-                                                             read_len)
+    tss_plot_file, tss_plot_large_file, tss_point_val = make_tss_plot(FINAL_BAM, # Use final to avoid duplicates
+                                                                      TSS,
+                                                                      OUTPUT_PREFIX,
+                                                                      CHROMSIZES,
+                                                                      read_len)
 
     # Signal to noise: reads in DHS regions vs not, reads falling
     # into blacklist regions
@@ -1496,7 +1496,7 @@ def main():
     ])
 
     ENRICHMENT_PLOTS = {
-        'tss': b64encode(open(vplot_large_file, 'rb').read())
+        'tss': b64encode(open(tss_plot_large_file, 'rb').read())
     }
 
     ANNOT_ENRICHMENTS = OrderedDict([
