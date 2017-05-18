@@ -579,7 +579,7 @@ def get_samtools_flagstat(bam_file):
     Runs samtools flagstat to get read metrics
     '''
     logging.info('samtools flagstat...')
-    results = pysam.flagstat(bam_file, split_lines=TRUE)
+    results = pysam.flagstat(bam_file, split_lines=True)
     flagstat = ''
     for line in results:
         logging.info(line.strip())
