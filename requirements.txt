@@ -1,14 +1,15 @@
-All packages needed
+#All packages needed
 
-Python (Anaconda)
-- pysam
-- pybedtools
-- metaseq
-- matplotlib
+#Python (Anaconda)
+numpy====1.10.2
+pysam==0.8.2.1
+pybedtools==0.6.9
+metaseq
+matplotlib
 
-Other
-- samtools
-- bedtools
-- picard
-- preseq
-- ucsc_tools
+#Other
+#- samtools
+#- bedtools
+#- picard
+#- preseq
+#- ucsc_tools
