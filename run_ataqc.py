@@ -206,11 +206,7 @@ def plot_gc(data_file):
     Replot the Picard output as png file to put into the html
     '''
     # Load data
-    with open(data_file) as fp:
-        for line in fp:
-            if line.startswith('## METRICS'):
-                break
-        data = np.loadtxt(fp, skiprows=1)
+    data = pd.read_table(data_file, comment="#")
 
     # Plot the data
     fig = plt.figure()
@@ -218,17 +214,17 @@ def plot_gc(data_file):
 
     plt.xlim((0, 100))
 
-    lin1 = ax.plot(data[:, 0], data[:, 4],
+    lin1 = ax.plot(data['GC'], data['NORMALIZED_COVERAGE'],
                    label='Normalized coverage', color='r')
     ax.set_ylabel('Normalized coverage')
 
     ax2 = ax.twinx()
-    lin2 = ax2.plot(data[:, 0], data[:, 3],
+    lin2 = ax2.plot(data['GC'], data['MEAN_BASE_QUALITY'],
                     label='Mean base quality at GC%', color='b')
     ax2.set_ylabel('Mean base quality at GC%')
 
     ax3 = ax.twinx()
-    lin3 = ax3.plot(data[:, 0], data[:, 1]/np.sum(data[:, 1]),
+    lin3 = ax3.plot(data['GC'], data['WINDOWS']/np.sum(data['WINDOWS']),
                     label='Windows at GC%', color='g')
     ax3.get_yaxis().set_visible(False)
 
@@ -334,7 +330,7 @@ def get_picard_complexity_metrics(aligned_bam, prefix):
     with open(out_file, 'rb') as fp:
         for line in fp:
             if header_seen:
-                est_library_size = int(line.strip().split()[-1])
+                est_library_size = int(float(line.strip().split()[-1]))
                 break
             if 'ESTIMATED_LIBRARY_SIZE' in line:
                 header_seen = True
