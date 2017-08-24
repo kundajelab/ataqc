@@ -1,4 +1,4 @@
-# functions to take QC objects and write them to html, txt, multiQC
+#!user/bin/env python
 
 from jinja2 import Template
 
@@ -7,7 +7,6 @@ def html_header(sample_name):
     template = Template(
         """
         <html>
-
         <head>
         <title>ATAqC - {{ sample_name }}</title>
         <style>
@@ -19,7 +18,6 @@ def html_header(sample_name):
             border-collapse:collapse;
             margin:20px;
         }
-
         .qc_table th{
             font-size:14px;
             font-weight:normal;
@@ -29,7 +27,6 @@ def html_header(sample_name):
             color:white;
             padding:8px;
         }
-
         .qc_table td{
             background:#f2f1eb;
             border-bottom:1px solid #fff;
@@ -37,14 +34,12 @@ def html_header(sample_name):
             border-top:1px solid transparent;
             padding:8px;
         }
-
         .qc_table .fail{
             color:#ff0000;
             font-weight:bold;
         }
         </style>
         </head>
-
         <body>
         """)
 
@@ -79,13 +74,75 @@ def html_text_description(description):
     return template.render(description=description)
 
 
+def html_table_generator(header, table_type, description, metric_dict, *fields):
+    template = Template(
+        """
+        {% if header is not none %}
+            <h3>{{ header }}</h3>
+        {% endif %}
+        <table class='qc_table'>
+            {% if fields %}
+                <thead>
+                <tr>
+                {% for field in fields %}
+                    {% if field is not none %}
+                        <th scope='col'>{{ field }}</th>
+                    {% endif %}
+                {% endfor %}
+                </tr>
+                </thead>
+            {% endif %}
+            <tbody>
+            {% for field, values in metric_dict.iteritems() %}
+            <tr>
+                {% for value in values %}
+                    {% if value is not none %}
+                        <td>{{ value }}</td>
+                    {% endif %}       
+                {% endfor %}
+            </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+        {% if description is not none %}
+        <pre>{{ description }}</pre>
+        {% endif %}
+        """)
+
+    return template.render(header=header,
+                           description=description,
+                           metric_dict=metric_dict,
+                           fields=fields)
+
+def html_img_generator(header, description, img_string):
+    template = Template(
+        """
+        {% macro inline_img(base64_img, img_type='png') -%}
+            {% if base64_img == '' %}
+                <pre>Metric failed.</pre>
+            {% else %}
+                <img src="data:image/{{ img_type }};base64,{{ base64_img }}">
+            {% endif %}
+        {%- endmacro %}
+        {% if header is not none %}
+            <h3>{{ header }}</h3>
+        {% endif %}
+        {{ inline_img(img_string) }}
+        {% if description is not none %}
+        <pre>{{ description }}</pre>
+        {% endif %}
+        """)
+
+    return template.render(header=header,
+                           description=description,
+                           img_string = img_string)
+
 def html_metric_and_fraction_table(header, description, metric_dict):
     template = Template(
         """
         {% if header is not none %}
             <h3>{{ header }}</h3>
         {% endif %}
-
         <table class='qc_table'>
             <thead>
             <tr>
@@ -94,18 +151,16 @@ def html_metric_and_fraction_table(header, description, metric_dict):
                 <th scope='col'>Fraction</th>
             </tr>
             </thead>
-
             <tbody>
-            {% for field, value in metric_dict.iteritems() %}
+                    {% for field, value in metric_dict.iteritems() %}
             <tr>
                 <td>{{ field }}</td>
-                <td>{{ '{0:,}'.format(value[0]) }}</td>
+                    <td>{{ '{0:,}'.format(value[0]) }}</td>
                 <td>{{ '{0:.3f}'.format(value[1]) }}</td>
             </tr>
             {% endfor %}
             </tbody>
         </table>
-
         {% if description is not none %}
         <pre>{{ description }}</pre>
         {% endif %}
@@ -121,7 +176,6 @@ def html_metric_table(header, description, metric_dict):
         {% if header is not none %}
             <h3>{{ header }}</h3>
         {% endif %}
-
         <table class='qc_table'>
             <thead>
             <tr>
@@ -129,7 +183,6 @@ def html_metric_table(header, description, metric_dict):
                 <th scope='col'>Value</th>
             </tr>
             </thead>
-
             <tbody>
             {% for field, value in metric_dict.iteritems() %}
             <tr>
@@ -139,7 +192,6 @@ def html_metric_table(header, description, metric_dict):
             {% endfor %}
             </tbody>
         </table>
-
         {% if description is not none %}
         <pre>{{ description }}</pre>
         {% endif %}
@@ -150,55 +202,64 @@ def html_metric_table(header, description, metric_dict):
 
 
 def qc_to_html(qc_object):
-    """Take a qc dict and write into html format"""
 
-    if qc_object['type'] == 'plot':
-        pass
+    rendered = ''
     
+    if qc_object['type'] == 'plot':
+        rendered = html_img_generator(qc_object['header'],
+                                      qc_object['description'],
+                                      qc_object['qc'])
+
     elif qc_object['type'] == 'qc_table':
-        pass
+        rendered = html_table_generator(qc_object['header'],
+                                        qc_object['type'],
+                                        qc_object['description'],
+                                        qc_object['qc'],
+                                        *qc_object['table_header'])
     
     elif qc_object['type'] == 'table':
-        rendered = html_metric_table(qc_object['header'],
-                                     qc_object['description'],
-                                     qc_object['qc'])
-        
+        rendered = html_table_generator(qc_object['header'],
+                                        qc_object['type'],
+                                        qc_object['description'],
+                                        qc_object['qc'],
+                                        *qc_object['table_header'])
+
     elif qc_object['type'] == 'metric_fraction_table':
-        rendered = html_metric_and_fraction_table(qc_object['header'],
-                                                  qc_object['description'],
-                                                  qc_object['qc'])
+        rendered = html_table_generator(qc_object['header'],
+                                        qc_object['type'],
+                                        qc_object['description'],
+                                        qc_object['qc'],
+                                        *qc_object['table_header'])
         
     else:
         rendered = ''
-
+        
     return rendered
 
 
-
-def write_html(qc_groups, args):
-    """Take the QC and write it all out into HTML"""
+def write_html(qc_groups, outprefix):
 
     rendered = ""
-    
+
     # write title and other useful stuff
     rendered += html_header('test')
-
+    
     for qc_group in qc_groups:
         
         # TODO write header
         rendered += html_section_header(qc_group.get_name())
-        
+
         qc_ordered_dict = qc_group.get_qc()
         
-        for qc_object in qc_ordered_dict.items():
-            print qc_object
-            rendered += qc_to_html(qc_object[1])
+        for key in qc_ordered_dict.keys():
+            qc_object = qc_ordered_dict[key]
+            rendered += qc_to_html(qc_object)
             
-        rendered += html_text_description(qc_group.get_description())
-
     rendered += html_footer()
 
-    with open('test_qc.html', 'w') as out:
+    outfile = '{}.html'.format(outprefix)
+
+    with open(outfile, 'w') as out:
         out.write(rendered)
 
     return None
