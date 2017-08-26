@@ -137,6 +137,26 @@ def html_img_generator(header, description, img_string):
                            description=description,
                            img_string = img_string)
 
+def html_log_generator(header, description, log):
+    template = Template(
+        """
+        {% if header is not none %}
+            <h3>{{ header }}</h3>
+        {% endif %}
+
+
+        <pre>{{ log }}</pre>
+
+
+        {% if description is not none %}
+        <pre>{{ description }}</pre>
+        {% endif %}
+        """)
+
+    return template.render(header=header,
+                           description=description,
+                           log=log)
+
 def html_metric_and_fraction_table(header, description, metric_dict):
     template = Template(
         """
@@ -210,12 +230,10 @@ def qc_to_html(qc_object):
                                       qc_object['description'],
                                       qc_object['qc'])
 
-    elif qc_object['type'] == 'qc_table':
-        rendered = html_table_generator(qc_object['header'],
-                                        qc_object['type'],
-                                        qc_object['description'],
-                                        qc_object['qc'],
-                                        *qc_object['table_header'])
+    elif qc_object['type'] == 'log':
+        rendered = html_log_generator(qc_object['header'],
+                                      qc_object['description'],
+                                      qc_object['qc'])
     
     elif qc_object['type'] == 'table':
         rendered = html_table_generator(qc_object['header'],

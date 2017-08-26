@@ -160,7 +160,19 @@ class AlignmentStats(QCGroup):
         pass
 
     def get_metrics(self):
-        pass
+        raw_bam_flagstat = self.metrics['raw_bam']['flagstat']
+
+        final_bam_flagstat = self.metrics['final_bam']['flagstat']
+
+        self.qc['raw_bam_flagstat'] = {'qc': raw_bam_flagstat,
+                                       'type': 'log',
+                                       'header': 'Raw Bam Samtools Flagstats',
+                                       'description': None}
+
+        self.qc['final_bam_flagstat'] = {'qc': final_bam_flagstat,
+                                         'type': 'log',
+                                         'header': 'Final Bam Samtools Flagstats',
+                                         'description': None}
 
 
 class FilteringStats(QCGroup):
