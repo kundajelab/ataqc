@@ -76,6 +76,25 @@ def parse_args():
     return args
 
 
+def unicode_to_byte(data, ignore_dicts=False):
+    # if data is a unicode string, return its string representation
+    if isinstance(data, unicode):
+        return data.encode('utf-8')
+        
+    # if data is a list of unicode values, return list of byte-encoded values
+    if isinstance(data, list):
+        return [unicode_to_byte(element, ignore_dicts=True) for element in data]
+
+    # if data is a dictionary, return dictionary of byte-encoded keys and values,
+    # but only if key-value pairs have not already been converted
+    if isinstance(data, dict) and not ignore_dicts:
+        return {
+unicode_to_byte(key, ignore_dicts=True): unicode_to_byte(value, ignore_dicts=True) for key, value in data.iteritems()
+        }
+    
+    return data
+
+
 def run_ataqc(args):
     """Run all the metrics and save out into a metrics dictionary"""
 
@@ -85,13 +104,16 @@ def run_ataqc(args):
     start = timeit.default_timer()
 
     # insert unicode-to-byte function here. json.load() output is in unicode format, and is not usable
+
     # by samtools or picard
 
     # set up species file
     if (args.species is not None):
         with open(args.species, 'r') as fp:
-            species_files = json.load(fp)
+            u_species_files = json.load(fp)
+
         # convert from unicode to byte here
+        species_files = unicode_to_byte(u_species_files)
 
     else:
         annotations = [args.dnase, args.blacklist, args.prom, args.enh, args.peaks]
@@ -109,17 +131,19 @@ def run_ataqc(args):
     # set up inputs file
     if (args.files is not None):
         with open(args.files, 'r') as fp:
-            data_files = json.load(fp)
+            u_data_files = json.load(fp)
 
         # convert from unicode to byte here
+        data_files = unicode_to_byte(u_data_files)
+
     else:
-        peaks = [args.peaks, args.naive_overlap_peaks, args.idr_peaks]
+        peak_files = [args.peaks, args.naive_overlap_peaks, args.idr_peaks]
         peak_names = ['Raw Peaks', 'Naive Overlap Peaks', 'IDR Peaks']
 
         data_files = {'genome': args.genome,
                      'sample_name': args.sample_name,
                      'final_reads_bed': args.finalbed,
-                     'peaks': peaks,
+                     'peak_files': peak_files,
                      'peak_names': peak_names,
                      'raw_bam': args.alignedbam,
                      'final_bam': args.finalbam,
@@ -152,8 +176,8 @@ def run_ataqc(args):
     
     # run peaks QC
     metrics['peaks'] = []
-    for peak_file_idx in range(len(data_files['peaks'])):
-        peak_file = peaks.Peaks(data_files['peaks'][peak_file_idx], data_files['peak_names'][peak_file_idx])
+    for peak_file_idx in range(len(data_files['peak_files'])):
+        peak_file = peaks.Peaks(data_files['peak_files'][peak_file_idx], data_files['peak_names'][peak_file_idx])
         metrics['peaks'].append(peak_file.run_metrics())
 
     print metrics

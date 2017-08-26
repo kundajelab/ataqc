@@ -237,12 +237,12 @@ def qc_to_html(qc_object):
     return rendered
 
 
-def write_html(qc_groups, outprefix):
+def write_html(qc_groups, sample_name, outprefix):
 
     rendered = ""
 
     # write title and other useful stuff
-    rendered += html_header('test')
+    rendered += html_header(sample_name)
     
     for qc_group in qc_groups:
         
