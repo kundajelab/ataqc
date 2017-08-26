@@ -1,0 +1,9 @@
+{                                                                                                                                   
+    "chrsz": "/scratch/users/leepc12/pipeline_genome_data/mm9/mm9.chrom.sizes",                                                     
+    "ref_fa": "/scratch/users/leepc12/pipeline_genome_data/mm9/mm9.fa",                                                             
+    "annotations": ["/scratch/users/leepc12/pipeline_genome_data/mm9/ataqc/mm9_univ_dhs_ucsc.from_mm10.bed.gz","/scratch/users/leepc12/pipeline_genome_data/mm9/mm9-blacklist.bed.gz","/scratch/users/leepc12/pipeline_genome_data/mm9/ataqc/tss_mm9_master.from_mm10.bed.gz","/scratch/users/leepc12/pipeline_genome_data/mm9/ataqc/mm9_enh_dhs_ucsc.from_mm10.bed.gz","/scratch/users/cteng585/fastq_test/results/short_run/20170814/peak/macs2/idr/pseudo_reps/rep1/20170814_rep1-pr.IDR0.1.filt.narrowPeak.gz"],                                                                                                                              
+    "annotation_names": ["DNAse","Blacklist","Promoters","Enhancers","Peaks"],                                                      
+    "tss_enrich": "/scratch/users/leepc12/pipeline_genome_data/mm9/ataqc/mm9_gencode_tss_unique.bed.gz",                            
+    "reg2map": "/scratch/users/leepc12/pipeline_genome_data/mm9/ataqc/dnase_avgs_merged_named.fseq.vals.gz",                        
+    "roadmap_meta": "/scratch/users/leepc12/pipeline_genome_data/mm9/ataqc/accession_to_name.txt"                                   
+} 
