@@ -403,8 +403,8 @@ class AlignedReads():
         tss_plot_large_file = '{0}_large_tss-enrich.png'.format(self.outprefix)
 
         # Load the TSS file
-        tss = pybedtools.BedTool(self.species_files['tss_enrich'])
-        tss_ext = tss.slop(b=bp_edge, g=self.species_files['chrsz'])
+        tss = pybedtools.BedTool(self.species_files['tss'])
+        tss_ext = tss.slop(b=bp_edge, g=self.species_files['chromsizes'])
 
         # Load the bam file
         bam = metaseq.genomic_signal(self.bam_file, 'bam') # Need to shift reads and just get ends, just load bed file?

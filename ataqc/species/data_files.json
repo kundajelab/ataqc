@@ -1,11 +1,14 @@
 {                                                                                       
     "genome": "mm9",
     "sample_name": "test",
-    "final_reads_bed": "/scratch/users/cteng585/fastq_test/results/short_run/20170814/align/rep1/shSRR3623094_1.trim.PE2SE.nodup.tn5.tagAlign.gz", 
-    "peak_files":["/scratch/users/cteng585/fastq_test/results/short_run/20170814/peak/macs2/idr/pseudo_reps/rep1/20170814_rep1-pr.IDR0.1.filt.narrowPeak.gz","/scratch/users/cteng585/fastq_test/results/short_run/20170814/peak/macs2/overlap/shSRR3623094_1.trim.PE2SE.nodup.tn5.pf.pval0.1.500K.naive_overlap.filt.narrowPeak.gz","/scratch/users/cteng585/fastq_test/results/short_run/20170814/peak/macs2/idr/pseudo_reps/rep1/20170814_rep1-pr.IDR0.1.filt.narrowPeak.gz"],                                                              
+    "fastq1":"/scratch/users/cteng585/fastq_test/results/short_run/20170814/align/rep1/shSRR3623094_1.trim.fastq.gz",
+    "fastq2":"/scratch/users/cteng585/fastq_test/results/short_run/20170814/align/rep1/shSRR3623094_2.trim.fastq.gz",
+    "final_bed": "/scratch/users/cteng585/fastq_test/results/short_run/20170814/align/rep1/shSRR3623094_1.trim.PE2SE.nodup.tn5.tagAlign.gz", 
+    "peak_files":["/scratch/users/cteng585/fastq_test/results/short_run/20170814/peak/macs2/idr/pseudo_reps/rep1/20170814_rep1-pr.IDR0.1.filt.narrowPeak.gz","/scratch/users/cteng585/fastq_test/results/short_run/20170814/peak/macs2/overlap/shSRR3623094_1.trim.PE2SE.nodup.tn5.pf.pval0.1.500K.naive_overlap.filt.narrowPeak.gz","/scratch/users/cteng585/fastq_test/results/short_run/20170814/peak/macs2/idr/pseudo_reps/rep1/20170814_rep1-pr.IDR0.1.filt.narrowPeak.gz"],   
     "peak_names":["Peaks","Naive Overlap","IDR Peaks"],                                                                    
-    "raw_bam":"/scratch/users/cteng585/fastq_test/results/short_run/20170814/align/rep1/shSRR3623094_1.trim.PE2SE.bam",
+    "aligned_bam":"/scratch/users/cteng585/fastq_test/results/short_run/20170814/align/rep1/shSRR3623094_1.trim.PE2SE.bam",
     "final_bam":"/scratch/users/cteng585/fastq_test/results/short_run/20170814/align/rep1/shSRR3623094_1.trim.PE2SE.nodup.bam",
+    "alignment_log":"/scratch/users/cteng585/fastq_test/results/short_run/20170814/qc/rep1/shSRR3623094_1.trim.PE2SE.align.log",
     "dup_log":"/scratch/users/cteng585/fastq_test/results/short_run/20170814/qc/rep1/shSRR3623094_1.trim.PE2SE.dup.qc",
     "pbc_log":"/scratch/users/cteng585/fastq_test/results/short_run/20170814/qc/rep1/shSRR3623094_1.trim.PE2SE.nodup.pbc.qc"
 }  

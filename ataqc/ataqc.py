@@ -31,7 +31,7 @@ def parse_args():
 
     # annotation files
     parser.add_argument('--chromsizes', help='chromsizes file')
-    parser.add_argument('--ref', help='Reference fasta file')
+    parser.add_argument('--ref_fa', help='Reference fasta file')
     parser.add_argument('--tss', help='TSS file')
     parser.add_argument('--dnase', help='Open chromatin region file')
     parser.add_argument('--blacklist', help='Blacklisted region file')
@@ -43,13 +43,13 @@ def parse_args():
     # put in processed files
     parser.add_argument('--fastq1', help='First set of reads if paired end, or the single end reads')
     parser.add_argument('--fastq2', help='Second set of reads if paired end')
-    parser.add_argument('--alignedbam', help='BAM file from the aligner')
-    parser.add_argument('--alignmentlog', help='Alignment log')
-    parser.add_argument('--coordsortbam', help='BAM file sorted by coordinate')
-    parser.add_argument('--duplog', help='Picard duplicate metrics file')
-    parser.add_argument('--pbc', help='ENCODE library complexity metrics file')
-    parser.add_argument('--finalbam', help='Final filtered BAM file')
-    parser.add_argument('--finalbed', help='Final filtered alignments in BED format')
+    parser.add_argument('--aligned_bam', help='BAM file from the aligner')
+    parser.add_argument('--alignment_log', help='Alignment log')
+    parser.add_argument('--coordsort_bam', help='BAM file sorted by coordinate')
+    parser.add_argument('--dup_log', help='Picard duplicate metrics file')
+    parser.add_argument('--pbc_log', help='ENCODE library complexity metrics file')
+    parser.add_argument('--final_bam', help='Final filtered BAM file')
+    parser.add_argument('--final_bed', help='Final filtered alignments in BED format')
     parser.add_argument('--bigwig', help='Final bigwig')
     parser.add_argument('--peaks', help='Peak file')
     parser.add_argument('--naive_overlap_peaks', default=None, help='Naive overlap peak file')
@@ -119,13 +119,13 @@ def run_ataqc(args):
         annotations = [args.dnase, args.blacklist, args.prom, args.enh, args.peaks]
         annotation_names = ['DNAse', 'Blacklist', 'Promoters', 'Enhancers', 'Peaks']
 
-        species_files = {'chrsz': args.chromsizes,
-                         'ref_fa': args.ref,
+        species_files = {'chromsizes': args.chromsizes,
+                         'ref_fa': args.ref_fa,
                          'annotations': annotations,
                          'annotation_names': annotation_names,
-                         'tss_enrich': args.tss,
+                         'tss': args.tss,
                          'reg2map': args.reg2map,
-                         'roadmap_meta': args.meta
+                         'meta': args.meta
         }
 
     # set up inputs file
@@ -142,13 +142,16 @@ def run_ataqc(args):
 
         data_files = {'genome': args.genome,
                      'sample_name': args.sample_name,
-                     'final_reads_bed': args.finalbed,
+                     'fastq1': args.fastq1,
+                     'fastq2': args.fastq2,
+                     'final_bed': args.final_bed,
                      'peak_files': peak_files,
                      'peak_names': peak_names,
-                     'raw_bam': args.alignedbam,
-                     'final_bam': args.finalbam,
-                     'dup_log': args.duplog,
-                     'pbc_log': args.pbc
+                     'aligned_bam': args.aligned_bam,
+                     'final_bam': args.final_bam,
+                     'alignment_log': args.alignment_log,
+                     'dup_log': args.dup_log,
+                     'pbc_log': args.pbc_log
         }
 
 
@@ -161,7 +164,7 @@ def run_ataqc(args):
     
 
     # run BAM file QC
-    raw_aligned_bam = reads.AlignedReads('raw_bam', data_files, False, species_files, args.outprefix)
+    raw_aligned_bam = reads.AlignedReads('aligned_bam', data_files, False, species_files, args.outprefix)
     metrics['raw_bam'] = raw_aligned_bam.run_metrics()
 
     final_aligned_bam = reads.AlignedReads('final_bam', data_files, True, species_files, args.outprefix)

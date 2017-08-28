@@ -18,7 +18,7 @@ def get_fract_reads_in_regions(reads_bed, regions_bed):
     return read_count, fract_reads
 
 def get_annotation_enrichments(data_files, species_files):
-    final_reads_bed = data_files['final_reads_bed']# Read 'final_reads_bed' field of data_files into variable
+    final_reads_bed = data_files['final_bed']# Read 'final_reads_bed' field of data_files into variable
     annotation_enrichments = {}
     for i in range(len(species_files['annotations'])):# For each annotation (gene region)
         read_count, read_fract = get_fract_reads_in_regions(final_reads_bed, species_files['annotations'][i])
