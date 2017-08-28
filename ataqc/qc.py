@@ -6,6 +6,8 @@ import abc
 import six
 import numpy as np
 import pandas as pd
+import logging
+
 from matplotlib import pyplot as plt
 from io import BytesIO
 from base64 import b64encode
@@ -160,9 +162,30 @@ class AlignmentStats(QCGroup):
         pass
 
     def get_metrics(self):
-        raw_bam_flagstat = self.metrics['raw_bam']['flagstat']
+        alignment_log = self.data_files['alignment_log']
 
+        def get_alignment_text(alignment_log):
+            '''
+            Get relevant stats from the alignment log and return
+            the file in a list format where each line is an element in
+            the list. Can be parsed further if desired.
+            '''
+            logging.info('Reading alignment log...')
+            alignment_text = ''
+            with open(alignment_log, 'rb') as fp:
+                for line in fp:
+                    logging.info(line.strip())
+                    alignment_text += line
+            return alignment_text
+
+        alignment_text = get_alignment_text(alignment_log)
+        raw_bam_flagstat = self.metrics['raw_bam']['flagstat']
         final_bam_flagstat = self.metrics['final_bam']['flagstat']
+
+        self.qc['alignment_log'] = {'qc': alignment_text,
+                                    'type': 'log',
+                                    'header': 'Alignment Log',
+                                    'description': None}
 
         self.qc['raw_bam_flagstat'] = {'qc': raw_bam_flagstat,
                                        'type': 'log',
