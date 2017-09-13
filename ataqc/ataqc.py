@@ -24,9 +24,13 @@ def parse_args():
 
     # where to put things
     parser.add_argument('--outprefix', help='Output prefix')
+
+    # run mode (QC for general purpose or ENCODE)
+    parser.add_argument('--mode', help='Run QC with all_metrics or encode_metrics', default='all_metrics')
     
     # run information
     parser.add_argument('--genome', help='Genome build used')
+    parser.add_argument('--cutoff', help='TSS enrichment quality cutoff value')
     parser.add_argument('--sample_name', help='Sample name')
 
     # annotation files
@@ -51,7 +55,7 @@ def parse_args():
     parser.add_argument('--final_bam', help='Final filtered BAM file')
     parser.add_argument('--final_bed', help='Final filtered alignments in BED format')
     parser.add_argument('--bigwig', help='Final bigwig')
-    parser.add_argument('--peaks', help='Peak file')
+    parser.add_argument('--peaks', help='Raw Peak file')
     parser.add_argument('--naive_overlap_peaks', default=None, help='Naive overlap peak file')
     parser.add_argument('--idr_peaks', default=None, help='IDR peak file')
     parser.add_argument('--use_sambamba_markdup', action='store_true', help='Use sambamba markdup instead of Picard')
@@ -139,9 +143,8 @@ def run_ataqc(args):
     else:
         peak_files = [args.peaks, args.naive_overlap_peaks, args.idr_peaks]
         peak_names = ['Raw Peaks', 'Naive Overlap Peaks', 'IDR Peaks']
-
+        
         data_files = {'genome': args.genome,
-                     'sample_name': args.sample_name,
                      'fastq1': args.fastq1,
                      'fastq2': args.fastq2,
                      'final_bed': args.final_bed,
@@ -165,10 +168,10 @@ def run_ataqc(args):
 
     # run BAM file QC
     raw_aligned_bam = reads.AlignedReads('aligned_bam', data_files, False, species_files, args.outprefix)
-    metrics['raw_bam'] = raw_aligned_bam.run_metrics()
+    metrics['raw_bam'] = raw_aligned_bam.run_metrics(args.mode)
 
     final_aligned_bam = reads.AlignedReads('final_bam', data_files, True, species_files, args.outprefix)
-    metrics['final_bam'] = final_aligned_bam.run_metrics()
+    metrics['final_bam'] = final_aligned_bam.run_metrics(args.mode)
 
     print metrics
 
@@ -178,10 +181,10 @@ def run_ataqc(args):
 
     
     # run peaks QC
-    metrics['peaks'] = []
+    metrics['peaks'] = {}
     for peak_file_idx in range(len(data_files['peak_files'])):
         peak_file = peaks.Peaks(data_files['peak_files'][peak_file_idx], data_files['peak_names'][peak_file_idx])
-        metrics['peaks'].append(peak_file.run_metrics())
+        metrics['peaks'][data_files['peak_names'][peak_file_idx]] = peak_file.run_metrics(args.mode)
 
     print metrics
         
@@ -191,14 +194,14 @@ def run_ataqc(args):
 
     # run integrative QC
     # this module operates exclusively on the metrics dict
-    metrics['integrative'] = integrative.run_metrics(metrics, data_files, species_files)
+    metrics['integrative'] = integrative.run_metrics(metrics, data_files, species_files, args.mode)
 
 
     #print metrics
 
     # and run QC checks on the data
     # ie, organize into QC groups
-    qc_groups = qc.run_qc(metrics, data_files, args.outprefix)
+    qc_groups = qc.run_qc(metrics, data_files, args.outprefix, args.sample_name, args.mode)
 
     print qc_groups
     
@@ -209,12 +212,12 @@ def run_ataqc(args):
     return qc_groups
 
 
-def viz_ataqc(qc_groups, sample_name, outprefix):
+def viz_ataqc(qc_groups, outprefix, sample_name):
     """View results - html or multiQC"""
 
     # give option of native html
 
-    viz.write_html(qc_groups, sample_name, outprefix)
+    viz.write_html(qc_groups, outprefix, sample_name)
 
     # also give option of multiQC
     
@@ -226,7 +229,7 @@ def main():
 
     args = parse_args()
     qc_groups = run_ataqc(args)
-    viz_ataqc(qc_groups, args.sample_name, args.outprefix)
+    viz_ataqc(qc_groups, args.outprefix, args.sample_name)
 
 
 

@@ -1,6 +1,7 @@
 #!user/bin/env python
 
 from jinja2 import Template
+import collections
 
 
 def html_header(sample_name):
@@ -74,7 +75,25 @@ def html_text_description(description):
     return template.render(description=description)
 
 
-def html_table_generator(header, table_type, description, metric_dict, *fields):
+def html_table_generator(header, table_type, description, metric_dict, flatten, *fields):
+
+    def flatten_list(value_list):
+        for elem in value_list:
+            if isinstance(elem, collections.Iterable) and not isinstance(elem, basestring):
+                for sub in flatten_list(elem):
+                    yield sub
+            else:
+                yield elem
+
+
+    qc_value_lists = []
+
+    for key, value in metric_dict.iteritems():
+        if flatten == True:
+            qc_value_lists.append([qc_value_list for qc_value_list in flatten_list(value)])
+        else:
+            qc_value_lists.append([qc_value_list for qc_value_list in value])
+
     template = Template(
         """
         {% if header is not none %}
@@ -93,12 +112,12 @@ def html_table_generator(header, table_type, description, metric_dict, *fields):
                 </thead>
             {% endif %}
             <tbody>
-            {% for field, values in metric_dict.iteritems() %}
+            {% for qc_value_list in qc_value_lists %}
             <tr>
-                {% for value in values %}
-                    {% if value is not none %}
-                        <td>{{ value }}</td>
-                    {% endif %}       
+                {% for qc_value in qc_value_list %}
+                    {% if qc_value is not none %}
+                        <td>{{ qc_value }}</td>
+                    {% endif %}
                 {% endfor %}
             </tr>
             {% endfor %}
@@ -111,7 +130,7 @@ def html_table_generator(header, table_type, description, metric_dict, *fields):
 
     return template.render(header=header,
                            description=description,
-                           metric_dict=metric_dict,
+                           qc_value_lists=qc_value_lists,
                            fields=fields)
 
 def html_img_generator(header, description, img_string):
@@ -190,37 +209,6 @@ def html_metric_and_fraction_table(header, description, metric_dict):
                            metric_dict=metric_dict)
 
 
-def html_metric_table(header, description, metric_dict):
-    template = Template(
-        """
-        {% if header is not none %}
-            <h3>{{ header }}</h3>
-        {% endif %}
-        <table class='qc_table'>
-            <thead>
-            <tr>
-                <th scope='col'>Metric</th>
-                <th scope='col'>Value</th>
-            </tr>
-            </thead>
-            <tbody>
-            {% for field, value in metric_dict.iteritems() %}
-            <tr>
-                <td>{{ field }}</td>
-                <td>{{ value }}</td>
-            </tr>
-            {% endfor %}
-            </tbody>
-        </table>
-        {% if description is not none %}
-        <pre>{{ description }}</pre>
-        {% endif %}
-        """)
-    return template.render(header=header,
-                           description=description,
-                           metric_dict=metric_dict)
-
-
 def qc_to_html(qc_object):
 
     rendered = ''
@@ -240,22 +228,15 @@ def qc_to_html(qc_object):
                                         qc_object['type'],
                                         qc_object['description'],
                                         qc_object['qc'],
-                                        *qc_object['table_header'])
-
-    elif qc_object['type'] == 'metric_fraction_table':
-        rendered = html_table_generator(qc_object['header'],
-                                        qc_object['type'],
-                                        qc_object['description'],
-                                        qc_object['qc'],
-                                        *qc_object['table_header'])
-        
+                                        qc_object['flatten'],
+                                        *qc_object['table_header'])        
     else:
         rendered = ''
         
     return rendered
 
 
-def write_html(qc_groups, sample_name, outprefix):
+def write_html(qc_groups, outprefix, sample_name):
 
     rendered = ""
 

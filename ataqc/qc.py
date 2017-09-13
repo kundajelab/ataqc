@@ -7,29 +7,26 @@ import six
 import numpy as np
 import pandas as pd
 import logging
+import os
 
 from matplotlib import pyplot as plt
 from io import BytesIO
 from base64 import b64encode
 
-# QC groups
-# run_qc() should check thresholds
-# run_qc() -> get_metrics()
-# run_qc() should check thresholds
-# get_qc() pulls table
-
-class QCGroup():# Base class
+# Base class
+class QCGroup(object):
     
-    def __init__(self, metrics, data_files, outprefix):# Initialize class attributes
+    # Initialize class attributes
+    def __init__(self, metrics, data_files, outprefix):
         self.metrics = metrics
         self.data_files = data_files
         self.outprefix = outprefix
         self.qc = OrderedDict()
         
-    def get_name(self):# Added get_ for readability
+    def get_name(self):
         pass
 
-    def get_description(self):# Added get_ for readability
+    def get_description(self):
         pass
 
     def get_metrics(self):
@@ -38,11 +35,16 @@ class QCGroup():# Base class
     def run_qc(self):
         pass
 
-    def get_qc(self):# Returns OrderedDict attribute
+    # Returns OrderedDict attribute that contains all the QC metrics
+    def get_qc(self):
         return self.qc
 
 
 class SampleInfo(QCGroup):
+
+    def __init__(self, metrics, data_files, outprefix, sample_name):
+        super(SampleInfo, self).__init__(metrics, data_files, outprefix)
+        self.sample_name = sample_name
 
     def get_name(self):
         return "Sample information"
@@ -52,8 +54,9 @@ class SampleInfo(QCGroup):
     
     def get_metrics(self):
         table_header = []
+        flatten_table = True
         sample_table = OrderedDict([
-            ('Sample name', QCNoCheck('Sample name')(self.data_files['sample_name'])),
+            ('Sample name', QCNoCheck('Sample name')(self.sample_name)),
             ('Genome', QCNoCheck('Genome')(self.data_files['genome'])),
             ('Paired or single end', QCNoCheck('Paired or single end')(self.metrics['raw_bam']['is_paired'])),
             ('Read length', QCNoCheck('Read length')(self.metrics['raw_bam']['read_length']))
@@ -63,7 +66,8 @@ class SampleInfo(QCGroup):
                                    'type': 'table',
                                    'header': 'Sample Information',
                                    'description': None,
-                                   'table_header': table_header}
+                                   'table_header': table_header,
+                                   'flatten': flatten_table}
             
             
 class SummaryReadStats(QCGroup):
@@ -83,6 +87,7 @@ class SummaryReadStats(QCGroup):
 
     def get_metrics(self):
         table_header = []
+        flatten_table = True
         read_summary_table = OrderedDict([
             ("Read count from sequencer", QCNoCheck('Read count from sequencer')
                                                    (self.metrics['raw_bam']['read_count'])),
@@ -101,7 +106,8 @@ class SummaryReadStats(QCGroup):
                                          'type': 'table',
                                          'header': 'Summary',
                                          'description': self.get_description(),
-                                         'table_header': table_header}
+                                         'table_header': table_header,
+                                         'flatten': flatten_table}
 
         # TODO make the bar graph
         def track_reads(reads_list, labels):
@@ -150,6 +156,46 @@ class SummaryReadStats(QCGroup):
                                         'type': 'plot',
                                         'header': None,
                                         'description': plot_description}
+
+
+class Fingerprints(QCGroup):
+
+    def get_name(self):
+        return "BAM Fingerprints"
+
+    def get_description(self):
+        pass
+
+    def run_qc(self):
+        def get_fingerprints(self):
+            logging.info('Analyzing BAM Fingerprints...')
+
+            count_file = '{0}_fingerprints.tab'.format(self.outprefix)
+            plot_file = '{0}_fingerprints.png'.format(self.outprefix)
+            bam_files = '{0} {1}'.format(self.data_files['aligned_bam'],
+                                         self.data_files['final_bam'])
+            labels = '{0} {1}'.format('Raw_Bam',
+                                      'Final_Bam')
+
+            plot_fingerprints = ('plotFingerprint '
+                                 '-b {0} ' 
+                                 '--labels {1} '
+                                 '--plotFile {2} '
+                                 '--outRawCounts {3}').format(bam_files,
+                                                              labels,
+                                                              plot_file,
+                                                              count_file)
+
+            os.system(plot_fingerprints)
+        
+        get_fingerprints(self)
+        img_src = '{0}_fingerprints.png'.format(self.outprefix)
+        fingerprints_plot = b64encode(open(img_src, 'rb').read())
+
+        self.qc['fingerprints_plot'] = {'qc': fingerprints_plot,
+                                        'type': 'plot',
+                                        'header': 'BAM Fingerprints',
+                                        'description': None}
 
 
 class AlignmentStats(QCGroup):
@@ -217,7 +263,8 @@ class FilteringStats(QCGroup):
         return description
 
     def get_metrics(self):
-        table_header = ['Metric', 'Raw Count, Percent of Reads']
+        table_header = ['Metric', 'Raw Count', 'Percent of Reads']
+        flatten_table = True
         filter_table = OrderedDict([
             ('Mapping quality > q30 (out of total)', QCNoCheck('Mapping quality > q30 (out of total)')
                                                               (self.metrics['raw_bam']['mapq'])),
@@ -235,7 +282,8 @@ class FilteringStats(QCGroup):
                                    'type': 'metric_fraction_table',
                                    'header': 'Filtering Statistics',
                                    'description': self.get_description(),
-                                   'table_header': table_header}
+                                   'table_header': table_header,
+                                   'flatten': flatten_table}
 
 #   EDIT
 class FragmentLengthStats(QCGroup):
@@ -258,7 +306,9 @@ class FragmentLengthStats(QCGroup):
                          ('Presence of Mono-Nucleosomal peak', 120, 250),
                          ('Presence of Di-Nucleosomal peak', 300, 500)]
 
+        # Perform QC checks and create distribution plot
         table_header_frag_stats = ['Metric', 'Value', 'QC', 'Description']
+        flatten_len_stats_table = True
         fragment_len_stats_table = OrderedDict([
             ('Fraction of reads in NFR', QCGreaterThanEqualCheck('Fraction of Reads in NFR', 0.4)
                                                                 (self.metrics['final_bam']['fragment_len'][0])),
@@ -267,6 +317,7 @@ class FragmentLengthStats(QCGroup):
             ])
 
         table_header_peaks = ['Metric', 'Peak Set', 'Selected Peak', 'QC']
+        flatten_len_peak_table = False
         fragment_len_peak_table = OrderedDict([
             ('Presence of NFR', QCHasElementInRange(*nuc_range_metrics[0])
                                                     (self.metrics['final_bam']['fragment_len'][2])),
@@ -278,22 +329,25 @@ class FragmentLengthStats(QCGroup):
 
         fragment_len_dist_plot = self.metrics['final_bam']['fragment_len'][3]
 
+        # Setup dictionary for parsing into HTML
         self.qc['fragment_len_dist_plot'] = {'qc': fragment_len_dist_plot,
                                              'type': 'plot',
                                              'header': 'Fragment Length Distribution',
                                              'description': None}
                                              
-        self.qc['peak_table'] = {'qc': fragment_len_peak_table,
-                                 'type': 'table',
-                                 'header': 'Nucleosomal Fragment Peaks',
-                                 'description': None,
-                                 'table_header': table_header_peaks}
+        self.qc['fragment_len_peak_table'] = {'qc': fragment_len_peak_table,
+                                              'type': 'table',
+                                              'header': 'Nucleosomal Fragment Peaks',
+                                              'description': None,
+                                              'table_header': table_header_peaks,
+                                              'flatten': flatten_len_peak_table}
 
         self.qc['fragment_len_stats_table'] = { 'qc': fragment_len_stats_table,
                                                 'type': 'table',
                                                 'header': 'Fragment Length Statistics',
                                                 'description': self.get_description(),
-                                                'table_header': table_header_frag_stats}
+                                                'table_header': table_header_frag_stats,
+                                                'flatten': flatten_len_stats_table}
 
 
 class PeakStats(QCGroup):
@@ -311,48 +365,50 @@ class PeakStats(QCGroup):
 
     def get_metrics(self):
         table_header = []
+        flatten_table = True
 
         raw_peak_table = OrderedDict([
-            ("Min Size", QCNoCheck("Min Size")(self.metrics['peaks'][0]['sizes'][0]['Min size'])),
-            ("25 Percentile", QCNoCheck("25 Percentile")(self.metrics['peaks'][0]['sizes'][0]['25 percentile'])),
-            ("50 Percentile", QCNoCheck("50 Percentile (Median)")(self.metrics['peaks'][0]['sizes'][0]['50 percentile (median)'])),
-            ("75 Percentile", QCNoCheck("75 Percentile")(self.metrics['peaks'][0]['sizes'][0]['75 percentile'])),
-            ("Max Size", QCNoCheck("Max Size")(self.metrics['peaks'][0]['sizes'][0]['Max size'])),
-            ("Mean", QCNoCheck("Mean Size")(self.metrics['peaks'][0]['sizes'][0]['Mean']))
+            ("Min Size", QCNoCheck("Min Size")(self.metrics['peaks']['Raw Peaks']['sizes'][0]['Min size'])),
+            ("25 Percentile", QCNoCheck("25 Percentile")(self.metrics['peaks']['Raw Peaks']['sizes'][0]['25 percentile'])),
+            ("50 Percentile", QCNoCheck("50 Percentile (Median)")(self.metrics['peaks']['Raw Peaks']['sizes'][0]['50 percentile (median)'])),
+            ("75 Percentile", QCNoCheck("75 Percentile")(self.metrics['peaks']['Raw Peaks']['sizes'][0]['75 percentile'])),
+            ("Max Size", QCNoCheck("Max Size")(self.metrics['peaks']['Raw Peaks']['sizes'][0]['Max size'])),
+            ("Mean", QCNoCheck("Mean Size")(self.metrics['peaks']['Raw Peaks']['sizes'][0]['Mean']))
             ])
 
-        raw_peak_plot = self.metrics['peaks'][0]['sizes'][1]
+        raw_peak_plot = self.metrics['peaks']['Raw Peaks']['sizes'][1]
 
 
         naive_peak_table = OrderedDict([
-            ("Min Size", QCNoCheck("Min Size")(self.metrics['peaks'][1]['sizes'][0]['Min size'])),
-            ("25 Percentile", QCNoCheck("25 Percentile")(self.metrics['peaks'][1]['sizes'][0]['25 percentile'])),
-            ("50 Percentile", QCNoCheck("50 Percentile (Median)")(self.metrics['peaks'][1]['sizes'][0]['50 percentile (median)'])),
-            ("75 Percentile", QCNoCheck("75 Percentile")(self.metrics['peaks'][1]['sizes'][0]['75 percentile'])),
-            ("Max Size", QCNoCheck("Max Size")(self.metrics['peaks'][1]['sizes'][0]['Max size'])),
-            ("Mean", QCNoCheck("Mean Size")(self.metrics['peaks'][1]['sizes'][0]['Mean']))
+            ("Min Size", QCNoCheck("Min Size")(self.metrics['peaks']['Naive Overlap Peaks']['sizes'][0]['Min size'])),
+            ("25 Percentile", QCNoCheck("25 Percentile")(self.metrics['peaks']['Naive Overlap Peaks']['sizes'][0]['25 percentile'])),
+            ("50 Percentile", QCNoCheck("50 Percentile (Median)")(self.metrics['peaks']['Naive Overlap Peaks']['sizes'][0]['50 percentile (median)'])),
+            ("75 Percentile", QCNoCheck("75 Percentile")(self.metrics['peaks']['Naive Overlap Peaks']['sizes'][0]['75 percentile'])),
+            ("Max Size", QCNoCheck("Max Size")(self.metrics['peaks']['Naive Overlap Peaks']['sizes'][0]['Max size'])),
+            ("Mean", QCNoCheck("Mean Size")(self.metrics['peaks']['Naive Overlap Peaks']['sizes'][0]['Mean']))
             ])
 
-        naive_peak_plot = self.metrics['peaks'][1]['sizes'][1]
+        naive_peak_plot = self.metrics['peaks']['Naive Overlap Peaks']['sizes'][1]
 
 
         idr_peak_table = OrderedDict([
-            ("Min Size", QCNoCheck("Min Size")(self.metrics['peaks'][2]['sizes'][0]['Min size'])),
-            ("25 Percentile", QCNoCheck("25 Percentile")(self.metrics['peaks'][2]['sizes'][0]['25 percentile'])),
-            ("50 Percentile", QCNoCheck("50 Percentile (Median)")(self.metrics['peaks'][2]['sizes'][0]['50 percentile (median)'])),
-            ("75 Percentile", QCNoCheck("75 Percentile")(self.metrics['peaks'][2]['sizes'][0]['75 percentile'])),
-            ("Max Size", QCNoCheck("Max Size")(self.metrics['peaks'][2]['sizes'][0]['Max size'])),
-            ("Mean", QCNoCheck("Mean Size")(self.metrics['peaks'][2]['sizes'][0]['Mean']))
+            ("Min Size", QCNoCheck("Min Size")(self.metrics['peaks']['IDR Peaks']['sizes'][0]['Min size'])),
+            ("25 Percentile", QCNoCheck("25 Percentile")(self.metrics['peaks']['IDR Peaks']['sizes'][0]['25 percentile'])),
+            ("50 Percentile", QCNoCheck("50 Percentile (Median)")(self.metrics['peaks']['IDR Peaks']['sizes'][0]['50 percentile (median)'])),
+            ("75 Percentile", QCNoCheck("75 Percentile")(self.metrics['peaks']['IDR Peaks']['sizes'][0]['75 percentile'])),
+            ("Max Size", QCNoCheck("Max Size")(self.metrics['peaks']['IDR Peaks']['sizes'][0]['Max size'])),
+            ("Mean", QCNoCheck("Mean Size")(self.metrics['peaks']['IDR Peaks']['sizes'][0]['Mean']))
             ])
 
-        idr_peak_plot = self.metrics['peaks'][2]['sizes'][1]
+        idr_peak_plot = self.metrics['peaks']['IDR Peaks']['sizes'][1]
 
 
         self.qc['raw_peak_table'] = {'qc': raw_peak_table,
                                      'type': 'table',
                                      'header': 'Raw Peak File Statistics',
                                      'description': None,
-                                     'table_header': table_header}
+                                     'table_header': table_header,
+                                     'flatten': flatten_table}
 
         self.qc['raw_peak_plot'] = {'qc': raw_peak_plot,
                                     'type': 'plot',
@@ -363,7 +419,8 @@ class PeakStats(QCGroup):
                                      'type': 'table',
                                      'header': 'Naive Overlap Peak File Statistics',
                                      'description': None,
-                                     'table_header': table_header}
+                                     'table_header': table_header,
+                                     'flatten': flatten_table}
 
         self.qc['naive_peak_plot'] = {'qc': naive_peak_plot,
                                     'type': 'plot',
@@ -374,7 +431,8 @@ class PeakStats(QCGroup):
                                      'type': 'table',
                                      'header': 'IDR Peak File Statistics',
                                      'description': None,
-                                     'table_header': table_header}
+                                     'table_header': table_header,
+                                     'flatten': flatten_table}
 
         self.qc['idr_peak_plot'] = {'qc': idr_peak_plot,
                                     'type': 'plot',
@@ -383,17 +441,19 @@ class PeakStats(QCGroup):
 
     def run_qc(self):
         table_header = ['Metrics', 'Counts', 'Results', 'QC']
+        flatten_table = True
         peak_qc_table = OrderedDict([
-            ("Raw Peaks", QCGreaterThanEqualCheck('Raw Peaks', 10000)(self.metrics['peaks'][0]['peak_count'])),
-            ("Naive Overlap Peaks", QCGreaterThanEqualCheck('Naive Overlap Peaks', 10000)(self.metrics['peaks'][1]['peak_count'])),
-            ("IDR Peaks", QCGreaterThanEqualCheck('IDR peaks', 10000)(self.metrics['peaks'][2]['peak_count']))
+            ("Raw Peaks", QCGreaterThanEqualCheck('Raw Peaks', 10000)(self.metrics['peaks']['Raw Peaks']['peak_count'])),
+            ("Naive Overlap Peaks", QCGreaterThanEqualCheck('Naive Overlap Peaks', 10000)(self.metrics['peaks']['Naive Overlap Peaks']['peak_count'])),
+            ("IDR Peaks", QCGreaterThanEqualCheck('IDR peaks', 10000)(self.metrics['peaks']['IDR Peaks']['peak_count']))
             ])
 
         self.qc['peak_qc'] = {'qc': peak_qc_table,
                               'type': 'table',
                               'header': 'Peak QC',
                               'description': self.get_description(),
-                              'table_header': table_header}
+                              'table_header': table_header,
+                              'flatten': flatten_table}
 
 
 class GCBias(QCGroup):
@@ -411,12 +471,12 @@ class GCBias(QCGroup):
 
     def get_metrics(self):
 
-        def plot_gc(data_file):
+        def plot_gc(img_src):
             '''
             Replot the Picard output as png file to put into the html
             '''
             # Load data
-            data = pd.read_table(data_file, comment="#")
+            data = pd.read_table(img_src, comment="#")
 
             # Plot the data
             fig = plt.figure()
@@ -476,8 +536,8 @@ class AnnotationQualStats(QCGroup):
         return description
 
     def get_metrics(self):
-        img_source = '{0}_large_tss-enrich.png'.format(self.outprefix)
-        annot_enrich_plot = b64encode(open(img_source, 'rb').read())
+        img_src = '{0}_large_tss-enrich.png'.format(self.outprefix)
+        annot_enrich_plot = b64encode(open(img_src, 'rb').read())
 
         plot_description = """
         Open chromatin assays should show enrichment in open chromatin sites, such as
@@ -485,7 +545,8 @@ class AnnotationQualStats(QCGroup):
         above 10.
         """
 
-        table_header = []
+        table_header = ['Fraction of Reads in Region', 'Raw Count of Reads', 'Percent of Reads']
+        flatten_table = True
         annot_enrich_table = OrderedDict([
             ("Fraction of reads in universal DHS regions", QCNoCheck("Fraction of reads in universal DHS regions")
                                                                     (self.metrics['integrative']['annotation_enrichments']['DNAse'])),
@@ -508,25 +569,88 @@ class AnnotationQualStats(QCGroup):
                                          'type': 'table',
                                          'header': 'Annotated Genomic Region Enrichments',
                                          'description': self.get_description(),
-                                         'table_header': table_header}
+                                         'table_header': table_header,
+                                         'flatten': flatten_table}
 
 
 class EncodeStats(QCGroup):
 
-# TODO: Get encode library complexity stats
+    def __init__(self, metrics, data_files, outprefix, tss_cutoff):
+        super(EncodeStats, self).__init__(metrics, data_files, outprefix)
+        self.tss_cutoff = tss_cutoff
+    
+    def get_metrics(self):
 
-    def get_metrics(self, subset='all'):
+        raw_read_count = self.metrics['raw_bam']['read_count']
+        aligned_read_count = self.metrics['raw_bam']['mapped_count']
+        mapq_filtered_count = self.metrics['raw_bam']['mapq'][0]
+        de_duped_count = int(self.metrics['raw_bam']['mapq'][0] - self.metrics['raw_bam']['picard_dups'][0])
+        no_mito_count = self.metrics['integrative']['final_reads']
 
-        if subset == 'encode':
-            qc_group_classes = [SampleInfo, EncodeStats]
+        encode_metrics = self.metrics['raw_bam']['encode_complexity']
+
+        rep_peak_count = self.metrics['peaks']['Raw Peaks']['peak_count']
+        idr_peak_count = self.metrics['peaks']['IDR Peaks']['peak_count']
+
+        tss_enrichment_val = self.metrics['final_bam']['tss_enrich'][2]
+        tss_cutoff = self.tss_cutoff
+
+        if (self.metrics['raw_bam']['is_paired'] == 'Paired-ended'):
+            min_read_count = 50000000
         else:
-            #qc_groups = [SampleInfo, SummaryReadStats, AlignmentStats, FilteringStats]
-            qc_group_classes = [SampleInfo, FilteringStats]
-            
-        qc_groups = [group(self.metrics, self.data_files) for group in qc_group_classes]
-        qc = [group.get_metrics() for group in qc_groups]
+            min_read_count = 25000000
 
-        return qc_groups
+        nuc_range_metrics = [('Presence of NFR peak', 20, 90),
+                         ('Presence of Mono-Nucleosomal peak', 120, 250)]
+
+        # Perform QC checks
+        table_header_stats = ['Metric', 'Value', 'QC Passed', 'QC Result']
+        flatten_stats_table = True
+        stats_table = OrderedDict([
+            ('Number of Aligned Reads', QCGreaterThanEqualCheck('Number of Aligned Reads', min_read_count)
+                                                               (aligned_read_count)),
+            ('Percentage of Mapped Reads (Alignment Rate)', QCGreaterThanEqualCheck('Percentage of Mapped Reads (Alignment Rate)', 0.95)
+                                                                                   (aligned_read_count / raw_read_count)),
+            ('Non-Redundant Fraction (NRF)', QCGreaterThanEqualCheck('Non-Redundant Fraction (NRF)', 0.9)
+                                                    (encode_metrics['NRF'])),
+            ('PCR Bottlenecking Coefficient 1 (PBC1)', QCGreaterThanEqualCheck('PCR Bottlenecking Coefficient 1 (PBC1)', 0.9)
+                                                                              (encode_metrics['PBC1'])),
+            ('PCR Bottlenecking Coefficient 2 (PBC2)', QCGreaterThanEqualCheck('PCR Bottlenecking Coefficient 2 (PBC2)', 3)
+                                                                              (encode_metrics['PBC2'])),
+            ('Replicated Peak Count', QCGreaterThanEqualCheck('Replicated Peak Count', 150000)
+                                                             (rep_peak_count)),
+            ('IDR Peak Count', QCGreaterThanEqualCheck('IDR Peak Count', 70000)
+                                                      (idr_peak_count)),
+            ('TSS Enrichment Value', QCGreaterThanEqualCheck('TSS Enrichment Value', tss_cutoff)
+                                                            (tss_enrichment_val)),
+            ("Fraction of reads in called peak regions", QCNoCheck("Fraction of reads in called peak regions")
+                                                                  (self.metrics['integrative']['annotation_enrichments']['Peaks']))
+            ])
+
+        table_header_peaks = ['Metric', 'Peak Set', 'Selected Peak', 'QC']
+        flatten_peak_table = False
+        fragment_len_peak_table = OrderedDict([
+            ('Presence of NFR', QCHasElementInRange(*nuc_range_metrics[0])
+                                                    (self.metrics['final_bam']['fragment_len'][2])),
+            ('Presence of Mono-Nucleosomal Peak', QCHasElementInRange(*nuc_range_metrics[1])
+                                                                    (self.metrics['final_bam']['fragment_len'][2]))
+            ])
+
+
+        # Setup dictionary for parsing into HTML
+        self.qc['stats_table'] = {'qc': stats_table,
+                                  'type': 'table',
+                                  'header': 'Thresholding',
+                                  'description': None,
+                                  'table_header': table_header_stats,
+                                  'flatten': flatten_stats_table}
+
+        self.qc['peak_table'] = {'qc': fragment_len_peak_table,
+                                 'type': 'table',
+                                 'header': 'Peak Presence',
+                                 'description': None,
+                                 'table_header': table_header_peaks,
+                                 'flatten': flatten_peak_table}
         
 
 
@@ -594,6 +718,13 @@ class QCHasElementInRange(QCCheck):
                 'Cannot find element in range [{}, {}]'.format( self.lower, 
                                                                 self.upper))
 
+# Convert to list then string to preserve commas that are removed from the array to string conversion,
+# and to avoid flattening during the HTML parse (strings aren't 'flattened')
+    def __call__(self, value):
+        qc_pass = self.check(value)
+        return QCResult(self.metric, str(list(value)), qc_pass,    
+                        self.message(str(list(value)), qc_pass))
+
 class QCNoCheck(QCCheck):
     def __init__(self, metric):
         super(QCNoCheck, self).__init__(metric)
@@ -603,33 +734,33 @@ class QCNoCheck(QCCheck):
         return QCResult(self.metric, value, None, None)
 
 
-def run_qc(metrics, data_files, outprefix):
-    sample_info = SampleInfo(metrics, data_files, outprefix)
+def run_qc(metrics, data_files, outprefix, sample_name, mode='all_metrics'):
 
-    summary_read_stats = SummaryReadStats(metrics, data_files, outprefix)
-
-    alignment_stats = AlignmentStats(metrics, data_files, outprefix)
-
-    filtering_stats = FilteringStats(metrics, data_files, outprefix)
-
-    fragment_len_stats = FragmentLengthStats(metrics, data_files, outprefix)
-
-    peak_stats = PeakStats(metrics, data_files, outprefix)
-
-    gc_bias_plot = GCBias(metrics, data_files, outprefix)
-
-    annot_enrich_stats = AnnotationQualStats(metrics, data_files, outprefix)
-    # encode_stats = EncodeStats(metrics, data_files)
-    # encode_stats.get_metrics()
-
-    qc_groups = [sample_info,
+    if mode == 'all_metrics':
+        sample_info = SampleInfo(metrics, data_files, outprefix, sample_name)
+        summary_read_stats = SummaryReadStats(metrics, data_files, outprefix)
+        alignment_stats = AlignmentStats(metrics, data_files, outprefix)
+        fingerprints_plot = Fingerprints(metrics, data_files, outprefix)
+        filtering_stats = FilteringStats(metrics, data_files, outprefix)
+        fragment_len_stats = FragmentLengthStats(metrics, data_files, outprefix)
+        peak_stats = PeakStats(metrics, data_files, outprefix)
+        gc_bias_plot = GCBias(metrics, data_files, outprefix)
+        annot_enrich_stats = AnnotationQualStats(metrics, data_files, outprefix)
+        
+        qc_groups = [sample_info,
                 summary_read_stats, 
                 alignment_stats,
+                fingerprints_plot,
                 filtering_stats,
                 fragment_len_stats,
                 peak_stats,
                 gc_bias_plot,
                 annot_enrich_stats]
+
+    elif mode == 'encode_metrics':
+        encode_stats = EncodeStats(metrics, data_files, outprefix, 5)
+
+        qc_groups = [encode_stats]
 
     for qc_group in qc_groups:
         qc_group.get_metrics()

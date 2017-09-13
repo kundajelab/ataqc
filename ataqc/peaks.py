@@ -17,6 +17,7 @@ class Peaks():
     def __init__(self, peak_file, peak_file_name):
         self.peak_file = peak_file
         self.peak_file_name = peak_file_name
+        self.metrics = {}
 
 
 
@@ -79,11 +80,18 @@ class Peaks():
 
 
 
-    def run_metrics(self):
-        metrics = {}
-        metrics['name'] = self.peak_file_name
-        metrics['sizes'] = self.get_region_size_metrics()
-        metrics['peak_count'] = self.count()
-        
-        
-        return metrics
+    def run_metrics(self, mode='all_metrics'):
+        self.metrics['name'] = self.peak_file_name
+        self.metrics['sizes'] = self.get_region_size_metrics()
+        self.metrics['peak_count'] = self.count()
+           
+        return self.metrics
+
+    def get_name(self):
+        return self.peak_file_name
+
+    def get_sizes(self):
+        return self.metrics['sizes']
+
+    def get_peak_count(self):
+        return self.metrics['peak_count']

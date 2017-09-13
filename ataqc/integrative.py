@@ -37,7 +37,7 @@ def get_final_read_count(metrics):
 
     return (num_final_reads, final_read_fraction)
 
-def run_metrics(all_metrics, data_files, species_files):
+def run_metrics(all_metrics, data_files, species_files, mode='all_metrics'):
     metrics = {}
     metrics['final_reads'] = get_final_read_count(all_metrics)
     metrics['annotation_enrichments'] = get_annotation_enrichments(data_files, species_files)

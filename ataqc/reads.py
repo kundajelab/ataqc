@@ -37,7 +37,6 @@ class Reads():
             self.fastq1 = fastq_files[0]
             self.fastq2 = fastq_files[1]
 
-            
 
     def count(self):
         with gzip.open(self.fastq1, 'r') as fp:
@@ -48,6 +47,9 @@ class Reads():
         else:
             return 2*(i+1)
 
+    def quality_fraction(self, threshold=20):
+        # How to handle this? 
+        return None
         
     def fastqc():
         return None
@@ -144,7 +146,7 @@ class AlignedReads():
         flagstat = ''
         for line in results:
             logging.info(line.strip())
-            flagstat += line
+            flagstat += (line.strip('\n') + '\n')
         return flagstat
 
 
@@ -328,10 +330,10 @@ class AlignedReads():
         tmp_filtered_bam_prefix = tmp_filtered_bam.replace('.bam', '')
         if self.is_paired() == 'Paired-ended':
             filter_bam = ('samtools view -F 1804 -f 2 -u {0} | '
-                          'samtools sort - {1}'.format(self.bam_file, tmp_filtered_bam_prefix))
+                          'samtools sort -o {1}.bam -T {1}'.format(self.bam_file, tmp_filtered_bam_prefix))
         else:
             filter_bam = ('samtools view -F 1804 -u {0} | '
-                          'samtools sort - {1}'.format(self.bam_file, tmp_filtered_bam_prefix))
+                          'samtools sort -o {1}.bam -T {1}'.format(self.bam_file, tmp_filtered_bam_prefix))
         os.system(filter_bam)
 
         mark_duplicates = ('java -Xmx4G -jar '
@@ -530,7 +532,7 @@ class AlignedReads():
                 return ''
             
             fig = plt.figure()
-            plt.bar(data[:, 0], data[:, 1])
+            plt.bar(data[:, 0], data[:, 1], snap=False)
             plt.xlim((0, 1000))
             
             if peaks:
@@ -558,15 +560,17 @@ class AlignedReads():
         return None
 
 
-    def run_metrics(self):
+    def run_metrics(self, mode='all_metrics'):
         
         metrics = {}
-        
+
         # always run (whether filtered or not)
         metrics['is_paired'] = self.paired_ended
         metrics['read_count'] = self.count()
-        metrics['read_length'] = self.read_length()
-        metrics['flagstat'] = self.samtools_flagstat
+
+        if mode == 'all_metrics':
+            metrics['read_length'] = self.read_length()
+            metrics['flagstat'] = self.samtools_flagstat
         
         if not self.is_filtered:
             # Duplicates, chrM, mapQ filtering, mito dups
@@ -581,42 +585,44 @@ class AlignedReads():
             print "picard_dup_stats() time: ", end-start
 
             start = time.time()
-            metrics['chrM'] = self.chr_m_stats()
-            end = time.time()
-            print "chr_m_stats() time: ", end-start
-
-            start = time.time()
-            metrics['chrM_dups'] = self.mito_dups()
-            end = time.time()
-            print "mito_dups() time: ", end-start
-
-            start = time.time()
             metrics['mapq'] = self.mapq_stats()
             end = time.time()
             print "mapq_stats() time: ", end-start
             
-            # GC content
-            start = time.time()
-            metrics['gc'] = self.gc_content()
-            end = time.time()
-            print "gc_content() time: ", end-start
-            
-            # complexity metrics on BAM file
-            start = time.time()
-            metrics['picard_complexity'] = self.picard_complexity()
-            end = time.time()
-            print "picard_complexity() time:", end-start
+            if mode == 'all_metrics':
+                start = time.time()
+                metrics['chrM'] = self.chr_m_stats()
+                end = time.time()
+                print "chr_m_stats() time: ", end-start
 
-            start = time.time()
-            metrics['preseq'] = self.preseq_complexity()
-            end = time.time()
-            print "preseq_complexity() time: ", end-start
+                start = time.time()
+                metrics['chrM_dups'] = self.mito_dups()
+                end = time.time()
+                print "mito_dups() time: ", end-start
 
-            start = time.time()
-            metrics['encode_complexity'] = self.encode_complexity()
-            end = time.time()
-            print "encode_complexity() time: ", end-start
-            
+                # GC content
+                start = time.time()
+                metrics['gc'] = self.gc_content()
+                end = time.time()
+                print "gc_content() time: ", end-start
+                
+                # complexity metrics on BAM file
+                start = time.time()
+                metrics['picard_complexity'] = self.picard_complexity()
+                end = time.time()
+                print "picard_complexity() time:", end-start
+
+                start = time.time()
+                metrics['preseq'] = self.preseq_complexity()
+                end = time.time()
+                print "preseq_complexity() time: ", end-start
+
+            if mode == 'encode_metrics':
+                start = time.time()
+                metrics['encode_complexity'] = self.encode_complexity()
+                end = time.time()
+                print "encode_complexity() time: ", end-start
+                
         else:
             # TSS enrichment
             start = time.time()
