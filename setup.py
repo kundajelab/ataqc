@@ -2,7 +2,7 @@ from setuptools import setup, find_packages
 
 setup(
     name='ataqc',
-    version='0.1',
+    version='0.2',
 
     description='ATAqC - quality control for ATAC-seq',
 
@@ -25,13 +25,20 @@ setup(
 
     keywords='ATAC-seq bioinformatics QC genomics',
 
-    packages=find_packages(exclude=['contrib', 'docs', 'tests*']),
+    packages=find_packages(include=['ataqc'],
+                           exclude=['contrib', 'docs', 'tests*']),
+    package_dir={'ataqc': 'ataqc'},
 
-    scripts=['bin/ataqc',],
+    scripts=['ataqc/ataqc'],
 
-    install_requires=['numpy', 'scipy', 'pandas', 'matplotlib',
-                      'pysam', 'pybedtools', 'metaseq', 'jinja2',
-                      ],
+    install_requires=['numpy >= 1.10.2', 
+                      'scipy', 
+                      'pandas', 
+                      'matplotlib >= 1.5.1',
+                      'pysam >= 0.8.2.1', 
+                      'pybedtools >= 0.6.9', 
+                      'metaseq == 0.5.6', 
+                      'jinja2'],
 
-    include_package_data=True,
+    include_package_data=True
 )
