@@ -4,6 +4,15 @@ from jinja2 import Template
 import collections
 
 
+def flatten_list(value_list):
+    for elem in value_list:
+        if isinstance(elem, collections.Iterable) and not isinstance(elem, basestring):
+            for sub in flatten_list(elem):
+                yield sub
+        else:
+            yield elem
+
+
 def html_header(sample_name):
     template = Template(
         """
@@ -46,7 +55,6 @@ def html_header(sample_name):
 
     return template.render(sample_name=sample_name)
 
-
 def html_footer():
     template = Template(
         """
@@ -75,16 +83,7 @@ def html_text_description(description):
     return template.render(description=description)
 
 
-def html_table_generator(header, table_type, description, metric_dict, flatten, *fields):
-
-    def flatten_list(value_list):
-        for elem in value_list:
-            if isinstance(elem, collections.Iterable) and not isinstance(elem, basestring):
-                for sub in flatten_list(elem):
-                    yield sub
-            else:
-                yield elem
-
+def html_table_generator(header, table_type, description, metric_dict, flatten=True, *fields):
 
     qc_value_lists = []
 
@@ -262,3 +261,26 @@ def write_html(qc_groups, outprefix, sample_name):
         out.write(rendered)
 
     return None
+
+def write_text(qc_groups, outprefix, sample_name):
+
+    text_file = open('{0}_qc.txt'.format(outprefix), 'w')
+
+    for qc_group in qc_groups:
+
+        qc_ordered_dict = qc_group.get_qc()
+
+        for key, qc_object in qc_ordered_dict.iteritems():
+            if qc_object['type'] != 'plot':
+                if isinstance(qc_object['qc'], basestring):
+                    text_file.write('{0} \n'.format(qc_object['qc']))
+                elif isinstance(qc_object['qc'], collections.OrderedDict):
+                    for field, qc_value_list in qc_object['qc'].iteritems():
+                        if qc_object['flatten'] == True:
+                            qc_value_list = flatten_list(qc_value_list)
+                        for value in qc_value_list:
+                            if value is not None:
+                                text_file.write('{0}\t'.format(value))
+                        text_file.write('\n')
+
+    text_file.close()

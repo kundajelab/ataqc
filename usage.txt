@@ -1,0 +1,44 @@
+Usage and options summary:
+
+Usage:
+Place file paths into two different jsons
+python ataqc.py --outprefix PATH_TO_OUTPUT
+				--sample_name DATA_LABEL
+				--files PATH_TO_DATA_FILES_JSON
+				--species PATH_TO_SPECIES_FILES_JSON
+
+or
+
+Enter each file path seperately
+python ataqc.py --outprefix PATH_TO_OUTPUT
+				--sample_name DATA_LABEL
+				--genome ANALYSIS GENOME
+				--fastq1 
+				--fastq2 
+				--final_bed 
+				--peaks RAW PEAK FILE
+				--naive_overlap_peaks 
+				--idr_peaks 
+				--aligned_bam 
+				--final_bam 
+				--alignment_log 
+				--dup_log 
+				--pbc_log
+				--chromsizes
+				--ref_fa
+				--dnase 
+				--blacklist
+				--prom 
+				--enh 
+				--peaks 
+				--tss 
+				--reg2map 
+				--meta 
+
+To run with ENCODE only metrics, add the argument "--mode encode_metrics". This should make the QC pipeline run a faster,
+but with more limited stat output: https://www.encodeproject.org/atac-seq/#standards
+
+All arguments are required to run through the pipeline.
+
+
+

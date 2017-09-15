@@ -560,7 +560,7 @@ class AlignedReads():
         return None
 
 
-    def run_metrics(self, mode='all_metrics'):
+    def run_metrics(self, encode_only=False):
         
         metrics = {}
 
@@ -568,7 +568,7 @@ class AlignedReads():
         metrics['is_paired'] = self.paired_ended
         metrics['read_count'] = self.count()
 
-        if mode == 'all_metrics':
+        if not encode_only:
             metrics['read_length'] = self.read_length()
             metrics['flagstat'] = self.samtools_flagstat
         
@@ -589,7 +589,7 @@ class AlignedReads():
             end = time.time()
             print "mapq_stats() time: ", end-start
             
-            if mode == 'all_metrics':
+            if not encode_only:
                 start = time.time()
                 metrics['chrM'] = self.chr_m_stats()
                 end = time.time()
@@ -617,7 +617,7 @@ class AlignedReads():
                 end = time.time()
                 print "preseq_complexity() time: ", end-start
 
-            if mode == 'encode_metrics':
+            if encode_only:
                 start = time.time()
                 metrics['encode_complexity'] = self.encode_complexity()
                 end = time.time()

@@ -279,7 +279,7 @@ class FilteringStats(QCGroup):
         ])
 
         self.qc['filter_table'] = {'qc': filter_table,
-                                   'type': 'metric_fraction_table',
+                                   'type': 'table',
                                    'header': 'Filtering Statistics',
                                    'description': self.get_description(),
                                    'table_header': table_header,
@@ -734,9 +734,9 @@ class QCNoCheck(QCCheck):
         return QCResult(self.metric, value, None, None)
 
 
-def run_qc(metrics, data_files, outprefix, sample_name, mode='all_metrics'):
+def run_qc(metrics, data_files, outprefix, sample_name, encode_only=False):
 
-    if mode == 'all_metrics':
+    if not encode_only:
         sample_info = SampleInfo(metrics, data_files, outprefix, sample_name)
         summary_read_stats = SummaryReadStats(metrics, data_files, outprefix)
         alignment_stats = AlignmentStats(metrics, data_files, outprefix)
@@ -757,7 +757,7 @@ def run_qc(metrics, data_files, outprefix, sample_name, mode='all_metrics'):
                 gc_bias_plot,
                 annot_enrich_stats]
 
-    elif mode == 'encode_metrics':
+    elif encode_only:
         encode_stats = EncodeStats(metrics, data_files, outprefix, 5)
 
         qc_groups = [encode_stats]

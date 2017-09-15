@@ -168,10 +168,10 @@ def run_ataqc(args):
 
     # run BAM file QC
     raw_aligned_bam = reads.AlignedReads('aligned_bam', data_files, False, species_files, args.outprefix)
-    metrics['raw_bam'] = raw_aligned_bam.run_metrics(args.mode)
+    metrics['raw_bam'] = raw_aligned_bam.run_metrics(args.encode_only)
 
     final_aligned_bam = reads.AlignedReads('final_bam', data_files, True, species_files, args.outprefix)
-    metrics['final_bam'] = final_aligned_bam.run_metrics(args.mode)
+    metrics['final_bam'] = final_aligned_bam.run_metrics(args.encode_only)
 
     print metrics
 
@@ -184,7 +184,7 @@ def run_ataqc(args):
     metrics['peaks'] = {}
     for peak_file_idx in range(len(data_files['peak_files'])):
         peak_file = peaks.Peaks(data_files['peak_files'][peak_file_idx], data_files['peak_names'][peak_file_idx])
-        metrics['peaks'][data_files['peak_names'][peak_file_idx]] = peak_file.run_metrics(args.mode)
+        metrics['peaks'][data_files['peak_names'][peak_file_idx]] = peak_file.run_metrics(args.encode_only)
 
     print metrics
         
@@ -194,14 +194,14 @@ def run_ataqc(args):
 
     # run integrative QC
     # this module operates exclusively on the metrics dict
-    metrics['integrative'] = integrative.run_metrics(metrics, data_files, species_files, args.mode)
+    metrics['integrative'] = integrative.run_metrics(metrics, data_files, species_files, args.outprefix, args.encode_only)
 
 
     #print metrics
 
     # and run QC checks on the data
     # ie, organize into QC groups
-    qc_groups = qc.run_qc(metrics, data_files, args.outprefix, args.sample_name, args.mode)
+    qc_groups = qc.run_qc(metrics, data_files, args.outprefix, args.sample_name, args.encode_only)
 
     print qc_groups
     
@@ -218,7 +218,7 @@ def viz_ataqc(qc_groups, outprefix, sample_name):
     # give option of native html
 
     viz.write_html(qc_groups, outprefix, sample_name)
-
+    viz.write_text(qc_groups, outprefix, sample_name)
     # also give option of multiQC
     
 
