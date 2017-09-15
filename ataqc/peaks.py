@@ -80,7 +80,7 @@ class Peaks():
 
 
 
-    def run_metrics(self, mode='all_metrics'):
+    def run_metrics(self, encode_only=False):
         self.metrics['name'] = self.peak_file_name
         self.metrics['sizes'] = self.get_region_size_metrics()
         self.metrics['peak_count'] = self.count()
