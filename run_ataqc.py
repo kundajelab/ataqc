@@ -642,7 +642,7 @@ def get_insert_distribution(final_bam, prefix):
     return insert_data, insert_plot
 
 
-def get_fract_reads_in_regions(reads_bed, regions_bed):
+def get_fract_reads_in_regions_old(reads_bed, regions_bed):
     '''
     Function that takes in bed file of reads and bed file of regions and
     gets fraction of reads sitting in said regions
@@ -658,6 +658,72 @@ def get_fract_reads_in_regions(reads_bed, regions_bed):
     fract_reads = float(read_count)/reads_bedtool.count()
 
     return read_count, fract_reads
+
+
+def get_fract_reads_in_regions(reads_bed, regions_bed):
+    """Function that takes in bed file of reads and bed file of regions and
+    gets fraction of reads sitting in said regions
+    """
+    # sort the bed, then merge, then write to correctly format
+    sort_process = subprocess.Popen(
+        ('bedtools', 'sort', '-i', regions_bed),
+        stdout=subprocess.PIPE)
+    
+    # make Popen object for merging bed
+    merge_process = subprocess.Popen(
+        ('bedtools', 'merge', '-i', 'stdin'),
+        stdin=sort_process.stdout,
+        stdout=subprocess.PIPE)
+    
+    # write intersection of beds to file to correctly format
+    # (default output has many newline and tab characters)
+    intersect_process = subprocess.Popen(
+        ('bedtools', 'intersect', '-c', '-nonamecheck', '-a', 'stdin', '-b', reads_bed),
+        stdin=merge_process.stdout,
+        stdout=subprocess.PIPE)
+    
+    #count_process = subprocess.Popen(
+    #    ("awk", "{sum=sum+$4}END{print sum}"),
+    #    stdin=intersect_process.stdout,
+    #    stdout=subprocess.PIPE)
+
+    #out, err = count_process.communicate()
+    out, err = intersect_process.communicate()
+    out = out.splitlines()
+
+    read_count = 0
+    for line in out:
+        read_count += int(line.strip().split('\t')[3])
+    intersection_read_count = read_count
+        
+    
+    #intersection_read_count = int(subprocess.check_output(
+    #    ("awk", "'{sum=sum+$4}END{print sum}'"),
+    #    stdin=intersect_process.stdout))
+
+    #intersection_read_count, stderr = count_process.communicate()
+    
+    #intersect_file = "{0}.intersect.tmp".format(os.path.basename(regions_bed))
+    #with open(intersect_file, 'w') as fp:
+    #    intersect_process = subprocess.call(
+    #        ('bedtools', 'intersect', '-c', '-nonamecheck', '-a', 'stdin', '-b', reads_bed),
+    #        stdin=merge_process.stdout,
+    #        stdout=fp)
+        
+    # get read count for intersection
+    #intersection_read_count = int(subprocess.check_output(
+    #    ('wc', '-l', intersect_file)).split()[0])
+    
+    # get read count for final_bed
+    zcat_process = subprocess.Popen(
+        ('zcat', reads_bed), stdout=subprocess.PIPE)
+    reads_bed_count = int(subprocess.check_output(
+        ('wc', '-l'), stdin=zcat_process.stdout).split('\n')[0])
+    
+    fract_reads = float(intersection_read_count) / reads_bed_count
+
+    return intersection_read_count, fract_reads
+    
 
 
 def get_signal_to_noise(final_bed, dnase_regions, blacklist_regions,
