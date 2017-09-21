@@ -29,8 +29,6 @@ setup(
                            exclude=['contrib', 'docs', 'tests*']),
     package_dir={'ataqc': 'ataqc'},
 
-    scripts=['ataqc/ataqc'],
-
     install_requires=['numpy >= 1.10.2', 
                       'scipy', 
                       'pandas', 
