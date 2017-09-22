@@ -4,6 +4,7 @@ import subprocess
 import pysam
 import gzip
 
+
 def get_fract_reads_in_regions(reads_bed, regions_bed, outprefix):
 
     # make Popen object for sorting bed
@@ -51,14 +52,16 @@ def get_fract_reads_in_regions_old(reads_bed, regions_bed):
 
     return read_count, fract_reads
 
+
 def get_annotation_enrichments(data_files, species_files, outprefix):
     final_reads_bed = data_files['final_bed']# Read 'final_reads_bed' field of data_files into variable
     annotation_enrichments = {}
-    for i in range(len(species_files['annotations'])):# For each annotation (gene region)
-        read_count, read_fract = get_fract_reads_in_regions(final_reads_bed, species_files['annotations'][i], outprefix)
-        annotation_enrichments[species_files['annotation_names'][i]] = (read_count, read_fract)
+    for annotation_key in species_files["annotations"].keys():
+        read_count, read_fract = get_fract_reads_in_regions(final_reads_bed, species_files['annotations'][annotation_key], outprefix)
+        annotation_enrichments[annotation_key] = (read_count, read_fract)
 
     return annotation_enrichments
+
 
 def get_final_read_count(metrics):
     assert 'raw_bam' in metrics.keys() # Check if 'raw_bam' key is in metrics dictionary
@@ -71,12 +74,14 @@ def get_final_read_count(metrics):
 
     return (num_final_reads, final_read_fraction)
 
+
 def run_metrics(all_metrics, data_files, species_files, outprefix, encode_only=False):
     metrics = {}
     metrics['final_reads'] = get_final_read_count(all_metrics)
     metrics['annotation_enrichments'] = get_annotation_enrichments(data_files, species_files, outprefix)
     
     return metrics                
+
 
 def get_signal_to_noise(final_bed, dnase_regions, blacklist_regions,
                         prom_regions, enh_regions, peaks):

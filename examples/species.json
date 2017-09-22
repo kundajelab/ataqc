@@ -1,0 +1,21 @@
+{
+    "mm9":{
+	"ref":"/mnt/data/pipeline_genome_data/mm9/mm9.fa",
+	"chromsizes":"/mnt/data/pipeline_genome_data/mm9/mm9.chrom.sizes",
+	"annotations":{
+	    "tss": "/mnt/data/pipeline_genome_data/mm9/ataqc/mm9_gencode_tss_unique.bed.gz",
+	    "dnase": "/mnt/data/pipeline_genome_data/mm9/ataqc/mm9_univ_dhs_ucsc.from_mm10.bed.gz",
+	    "prom": "/mnt/data/pipeline_genome_data/mm9/ataqc/tss_mm9_master.from_mm10.bed.gz",
+	    "enh": "/mnt/data/pipeline_genome_data/mm9/ataqc/mm9_enh_dhs_ucsc.from_mm10.bed.gz",
+	    "blacklist": "/mnt/data/pipeline_genome_data/mm9/mm9-blacklist.bed.gz"
+	},
+	"reg2map":"/mnt/data/pipeline_genome_data/mm9/ataqc/dnase_avgs_merged_named.fseq.vals.gz",
+	"reg2map_bed":"/mnt/data/pipeline_genome_data/mm9/ataqc/mm9_dhs_universal_ucsc_v1.bed.gz",
+	"meta":"/mnt/data/pipeline_genome_data/mm9/ataqc/accession_to_name.txt"
+    },
+    
+    "hg19":{
+	
+    }
+    
+}

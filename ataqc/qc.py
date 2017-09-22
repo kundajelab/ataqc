@@ -172,7 +172,7 @@ class Fingerprints(QCGroup):
 
             count_file = '{0}_fingerprints.tab'.format(self.outprefix)
             plot_file = '{0}_fingerprints.png'.format(self.outprefix)
-            bam_files = '{0} {1}'.format(self.data_files['aligned_bam'],
+            bam_files = '{0} {1}'.format(self.data_files['raw_bam'],
                                          self.data_files['final_bam'])
             labels = '{0} {1}'.format('Raw_Bam',
                                       'Final_Bam')
@@ -367,87 +367,39 @@ class PeakStats(QCGroup):
         table_header = []
         flatten_table = True
 
-        raw_peak_table = OrderedDict([
-            ("Min Size", QCNoCheck("Min Size")(self.metrics['peaks']['Raw Peaks']['sizes'][0]['Min size'])),
-            ("25 Percentile", QCNoCheck("25 Percentile")(self.metrics['peaks']['Raw Peaks']['sizes'][0]['25 percentile'])),
-            ("50 Percentile", QCNoCheck("50 Percentile (Median)")(self.metrics['peaks']['Raw Peaks']['sizes'][0]['50 percentile (median)'])),
-            ("75 Percentile", QCNoCheck("75 Percentile")(self.metrics['peaks']['Raw Peaks']['sizes'][0]['75 percentile'])),
-            ("Max Size", QCNoCheck("Max Size")(self.metrics['peaks']['Raw Peaks']['sizes'][0]['Max size'])),
-            ("Mean", QCNoCheck("Mean Size")(self.metrics['peaks']['Raw Peaks']['sizes'][0]['Mean']))
+        for peak_key in self.metrics["peaks"].keys():
+            peak_table = OrderedDict([
+                ("Min Size", QCNoCheck("Min Size")(self.metrics['peaks'][peak_key]['sizes'][0]['Min size'])),
+                ("25 Percentile", QCNoCheck("25 Percentile")(self.metrics['peaks'][peak_key]['sizes'][0]['25 percentile'])),
+                ("50 Percentile", QCNoCheck("50 Percentile (Median)")(self.metrics['peaks'][peak_key]['sizes'][0]['50 percentile (median)'])),
+                ("75 Percentile", QCNoCheck("75 Percentile")(self.metrics['peaks'][peak_key]['sizes'][0]['75 percentile'])),
+                ("Max Size", QCNoCheck("Max Size")(self.metrics['peaks'][peak_key]['sizes'][0]['Max size'])),
+                ("Mean", QCNoCheck("Mean Size")(self.metrics['peaks'][peak_key]['sizes'][0]['Mean']))
             ])
 
-        raw_peak_plot = self.metrics['peaks']['Raw Peaks']['sizes'][1]
+            self.qc['{}_peak_table'.format(peak_key)] = {
+                'qc': peak_table,
+                'type': 'table',
+                'header': 'Peak File Statistics - {}'.format(peak_key),
+                'description': None,
+                'table_header': table_header,
+                'flatten': flatten_table}
+            
+            peak_plot = self.metrics['peaks'][peak_key]['sizes'][1]            
+            self.qc['{}_peak_plot'.format(peak_key)] = {
+                'qc': peak_plot,
+                'type': 'plot',
+                'header': None,
+                'description': None}
 
-
-        naive_peak_table = OrderedDict([
-            ("Min Size", QCNoCheck("Min Size")(self.metrics['peaks']['Naive Overlap Peaks']['sizes'][0]['Min size'])),
-            ("25 Percentile", QCNoCheck("25 Percentile")(self.metrics['peaks']['Naive Overlap Peaks']['sizes'][0]['25 percentile'])),
-            ("50 Percentile", QCNoCheck("50 Percentile (Median)")(self.metrics['peaks']['Naive Overlap Peaks']['sizes'][0]['50 percentile (median)'])),
-            ("75 Percentile", QCNoCheck("75 Percentile")(self.metrics['peaks']['Naive Overlap Peaks']['sizes'][0]['75 percentile'])),
-            ("Max Size", QCNoCheck("Max Size")(self.metrics['peaks']['Naive Overlap Peaks']['sizes'][0]['Max size'])),
-            ("Mean", QCNoCheck("Mean Size")(self.metrics['peaks']['Naive Overlap Peaks']['sizes'][0]['Mean']))
-            ])
-
-        naive_peak_plot = self.metrics['peaks']['Naive Overlap Peaks']['sizes'][1]
-
-
-        idr_peak_table = OrderedDict([
-            ("Min Size", QCNoCheck("Min Size")(self.metrics['peaks']['IDR Peaks']['sizes'][0]['Min size'])),
-            ("25 Percentile", QCNoCheck("25 Percentile")(self.metrics['peaks']['IDR Peaks']['sizes'][0]['25 percentile'])),
-            ("50 Percentile", QCNoCheck("50 Percentile (Median)")(self.metrics['peaks']['IDR Peaks']['sizes'][0]['50 percentile (median)'])),
-            ("75 Percentile", QCNoCheck("75 Percentile")(self.metrics['peaks']['IDR Peaks']['sizes'][0]['75 percentile'])),
-            ("Max Size", QCNoCheck("Max Size")(self.metrics['peaks']['IDR Peaks']['sizes'][0]['Max size'])),
-            ("Mean", QCNoCheck("Mean Size")(self.metrics['peaks']['IDR Peaks']['sizes'][0]['Mean']))
-            ])
-
-        idr_peak_plot = self.metrics['peaks']['IDR Peaks']['sizes'][1]
-
-
-        self.qc['raw_peak_table'] = {'qc': raw_peak_table,
-                                     'type': 'table',
-                                     'header': 'Raw Peak File Statistics',
-                                     'description': None,
-                                     'table_header': table_header,
-                                     'flatten': flatten_table}
-
-        self.qc['raw_peak_plot'] = {'qc': raw_peak_plot,
-                                    'type': 'plot',
-                                    'header': None,
-                                    'description': None}
-
-        self.qc['naive_peak_table'] = {'qc': naive_peak_table,
-                                     'type': 'table',
-                                     'header': 'Naive Overlap Peak File Statistics',
-                                     'description': None,
-                                     'table_header': table_header,
-                                     'flatten': flatten_table}
-
-        self.qc['naive_peak_plot'] = {'qc': naive_peak_plot,
-                                    'type': 'plot',
-                                    'header': None,
-                                    'description': None}
-
-        self.qc['idr_peak_table'] = {'qc': idr_peak_table,
-                                     'type': 'table',
-                                     'header': 'IDR Peak File Statistics',
-                                     'description': None,
-                                     'table_header': table_header,
-                                     'flatten': flatten_table}
-
-        self.qc['idr_peak_plot'] = {'qc': idr_peak_plot,
-                                    'type': 'plot',
-                                    'header': None,
-                                    'description': None}
 
     def run_qc(self):
         table_header = ['Metrics', 'Counts', 'Results', 'QC']
         flatten_table = True
-        peak_qc_table = OrderedDict([
-            ("Raw Peaks", QCGreaterThanEqualCheck('Raw Peaks', 10000)(self.metrics['peaks']['Raw Peaks']['peak_count'])),
-            ("Naive Overlap Peaks", QCGreaterThanEqualCheck('Naive Overlap Peaks', 10000)(self.metrics['peaks']['Naive Overlap Peaks']['peak_count'])),
-            ("IDR Peaks", QCGreaterThanEqualCheck('IDR peaks', 10000)(self.metrics['peaks']['IDR Peaks']['peak_count']))
-            ])
-
+        peak_qc_table = OrderedDict()
+        for peak_key in self.metrics["peaks"].keys():
+            peak_name = "{}_peaks".format(peak_key)
+            peak_qc_table[peak_name] = QCGreaterThanEqualCheck(peak_name, 10000)(self.metrics['peaks'][peak_key]['peak_count'])
         self.qc['peak_qc'] = {'qc': peak_qc_table,
                               'type': 'table',
                               'header': 'Peak QC',
@@ -547,18 +499,10 @@ class AnnotationQualStats(QCGroup):
 
         table_header = ['Fraction of Reads in Region', 'Raw Count of Reads', 'Percent of Reads']
         flatten_table = True
-        annot_enrich_table = OrderedDict([
-            ("Fraction of reads in universal DHS regions", QCNoCheck("Fraction of reads in universal DHS regions")
-                                                                    (self.metrics['integrative']['annotation_enrichments']['DNAse'])),
-            ("Fraction of reads in blacklist regions", QCNoCheck("Fraction of reads in blacklist regions")
-                                                                (self.metrics['integrative']['annotation_enrichments']['Blacklist'])),
-            ("Fraction of reads in promoter regions", QCNoCheck("Fraction of reads in promoter regions")
-                                                               (self.metrics['integrative']['annotation_enrichments']['Promoters'])),
-            ("Fraction of reads in enhancer regions", QCNoCheck("Fraction of reads in enhancer regions")
-                                                               (self.metrics['integrative']['annotation_enrichments']['Enhancers'])),
-            ("Fraction of reads in called peak regions", QCNoCheck("Fraction of reads in called peak regions")
-                                                                  (self.metrics['integrative']['annotation_enrichments']['Peaks']))
-            ])
+        annot_enrich_table = OrderedDict()
+        for annotation_key in self.metrics["integrative"]["annotation_enrichments"].keys():
+            annot_enrich_table["Fraction of reads in {}".format(annotation_key)] = QCNoCheck(
+                "Fraction of reads in universal DHS regions")(self.metrics['integrative']['annotation_enrichments'][annotation_key])
 
         self.qc['annot_enrich_plot'] = {'qc': annot_enrich_plot,
                                         'type': 'plot',
@@ -759,7 +703,6 @@ def run_qc(metrics, data_files, outprefix, sample_name, encode_only=False):
 
     elif encode_only:
         encode_stats = EncodeStats(metrics, data_files, outprefix, 5)
-
         qc_groups = [encode_stats]
 
     for qc_group in qc_groups:

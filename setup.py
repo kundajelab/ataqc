@@ -38,5 +38,7 @@ setup(
                       'metaseq == 0.5.6', 
                       'jinja2'],
 
-    include_package_data=True
+    include_package_data=True,
+
+    scripts=["bin/ataqc"]
 )

@@ -58,6 +58,7 @@ class Reads():
     def run_qc():
         return None
 
+    
 class AlignedReads():
 
     def __init__(self, key, data_files, is_filtered, species_files, outprefix):
@@ -72,7 +73,6 @@ class AlignedReads():
         self.paired_ended = self.is_paired()
         self.samtools_flagstat = self.samtools_flagstat()
 
-
         
     def is_paired(self):
         logging.info("Determining if paired-ended...")
@@ -84,13 +84,11 @@ class AlignedReads():
                 else:
                     logging.info('single-ended')
                     return "Single-ended"
-
                 
                 
     def count(self):
         logging.info("Getting read count in BAM file")
         return int(subprocess.check_output(['samtools', 'view', '-c', self.bam_file]).strip())# '-c' option gives count of reads
-
 
     
     def read_length(self, sample_num=1000):# 1000 reads per bam file? Or this is just sufficient to get a good feel
@@ -190,7 +188,7 @@ class AlignedReads():
                           '{5}/picard.jar '
                           'CollectGcBiasMetrics R={0} I={1} O={2} '
                           'ASSUME_SORTED=FALSE '
-                          'CHART={3} S={4}').format(self.species_files['ref_fa'],
+                          'CHART={3} S={4}').format(self.species_files['ref'],
                                                     self.bam_file, 
                                                     output_file,
                                                     plot_file,
@@ -405,7 +403,7 @@ class AlignedReads():
         tss_plot_large_file = '{0}_large_tss-enrich.png'.format(self.outprefix)
 
         # Load the TSS file
-        tss = pybedtools.BedTool(self.species_files['tss'])
+        tss = pybedtools.BedTool(self.species_files["annotations"]['tss'])
         tss_ext = tss.slop(b=bp_edge, g=self.species_files['chromsizes'])
 
         # Load the bam file
@@ -560,7 +558,7 @@ class AlignedReads():
         return None
 
 
-    def run_metrics(self, encode_only=False):
+    def run_metrics(self, encode=False):
         
         metrics = {}
 
@@ -568,7 +566,7 @@ class AlignedReads():
         metrics['is_paired'] = self.paired_ended
         metrics['read_count'] = self.count()
 
-        if not encode_only:
+        if not encode:
             metrics['read_length'] = self.read_length()
             metrics['flagstat'] = self.samtools_flagstat
         
@@ -589,7 +587,7 @@ class AlignedReads():
             end = time.time()
             print "mapq_stats() time: ", end-start
             
-            if not encode_only:
+            if not encode:
                 start = time.time()
                 metrics['chrM'] = self.chr_m_stats()
                 end = time.time()
@@ -617,7 +615,7 @@ class AlignedReads():
                 end = time.time()
                 print "preseq_complexity() time: ", end-start
 
-            if encode_only:
+            if encode:
                 start = time.time()
                 metrics['encode_complexity'] = self.encode_complexity()
                 end = time.time()
