@@ -28,6 +28,7 @@ setup(
     packages=find_packages(include=['ataqc'],
                            exclude=['contrib', 'docs', 'tests*']),
     package_dir={'ataqc': 'ataqc'},
+    package_data={"":["data/thresholds.json"]},
 
     install_requires=['numpy >= 1.10.2', 
                       'scipy', 

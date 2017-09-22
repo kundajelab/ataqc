@@ -9,6 +9,7 @@ import argparse
 import json
 import logging
 import time
+import pkg_resources
 
 from ataqc.util.io import sample_sheet_to_dict
 from ataqc.util.io import load_json_to_string_dict
@@ -65,6 +66,8 @@ def add_run_all_parser(subparsers):
 
     argparser_runall.add_argument("--samples", required=True, help="tab delimited data sheet")
     argparser_runall.add_argument("--species", required=True, help="species json file")
+    argparser_runall.add_argument("--thresholds", default=pkg_resources.resource_filename('ataqc', 'data/thresholds.json'),
+                                  help="qc thresholds json file")
     argparser_runall.add_argument("--encode", action="store_true", help="only run ENCODE QC")
 
     add_output_options(argparser_runall)
@@ -194,7 +197,11 @@ def main():
     if subcommand == "run_all":
         # convert data sheet into a dict of arguments, then use run_legacy
         species_files = load_json_to_string_dict(args.species)
+        thresholds = load_json_to_string_dict(args.thresholds)
         samples = sample_sheet_to_dict(args.samples)
+        print thresholds
+        
+        quit()
         for sample in samples:
             metrics = run_metrics(
                 sample,

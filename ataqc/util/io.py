@@ -50,10 +50,11 @@ def unicode_to_byte(data, ignore_dicts=False):
 
     # if data is a dictionary, return dictionary of byte-encoded keys and values,
     # but only if key-value pairs have not already been converted
+    
     if isinstance(data, dict) and not ignore_dicts:
-        return {
-            unicode_to_byte(key, ignore_dicts=True): unicode_to_byte(value, ignore_dicts=True) for key, value in data.iteritems()
-        }
+        return OrderedDict([
+            (unicode_to_byte(key, ignore_dicts=True), unicode_to_byte(value, ignore_dicts=ignore_dicts)) for key, value in data.iteritems()
+        ])
     
     return data
 

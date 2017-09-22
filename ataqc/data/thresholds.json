@@ -1,0 +1,11 @@
+{
+    "hg19":{
+	"Number of Aligned Reads": 25000000,
+	"Percentage of Mapped Reads (Alignment Rate)": 0.95,
+	"Non-Redundant Fraction (NRF)": 0.9,
+	"PCR Bottlenecking Coefficient 1 (PBC1)": 0.9,
+	"PCR Bottlenecking Coefficient 2 (PBC2)": 3,
+	"TSS Enrichment Value": 6,
+	"Fraction of reads in called peak regions": 0.2
+    }
+}
