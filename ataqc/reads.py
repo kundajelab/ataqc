@@ -69,20 +69,16 @@ class AlignedReads():
     """This is a class intended to store BAM files
     """
     
-    def __init__(self, key, data_files, is_filtered, species_files, outprefix):
-        # TODO consider just extracting key relevant files instead of providing
-        # all data files
-        bam_file = data_files[key]
-
+    def __init__(self, bam_file, is_filtered, species_files, outprefix, pbc_log=None, dup_log=None):
         assert(bam_file.endswith('.bam'))
         self.bam_file = bam_file
-        self.data_files = data_files
         self.is_filtered = is_filtered
         self.species_files = species_files
         self.outprefix = outprefix
         self.paired_ended = self.is_paired()
         self.samtools_flagstat = self.samtools_flagstat()
-
+        self.pbc_log = pbc_log
+        self.dup_log = dup_log
         
     def is_paired(self):
         logging.info("Determining if paired-ended...")
@@ -240,8 +236,8 @@ class AlignedReads():
     def encode_complexity(self):
 
         logging.info('Getting ENCODE metrics...')
-        if 'pbc_log' in self.data_files.keys():
-            with open(self.data_files['pbc_log'], 'rb') as fp:
+        if self.pbc_log is not None:
+            with open(self.pbc_log, 'rb') as fp:
                 for line in fp:
                     l_list = line.strip().split('\t')
                     NRF = float(l_list[4])
@@ -257,11 +253,11 @@ class AlignedReads():
 
     def picard_dup_stats(self):
         logging.info('Running Picard MarkDuplicates...')
-        if 'dup_log' in self.data_files.keys():
+        if self.dup_log is not None:
             
             mark = 0
             dup_stats = {}
-            with open(self.data_files['dup_log']) as fp:
+            with open(self.dup_log, 'r') as fp:
                 for line in fp:
                     if '##' in line:
                         if 'METRICS CLASS' in line:

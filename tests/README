@@ -1,3 +1,33 @@
+TEST DOCUMENTATION
+
+--
+
+To properly run tests, first download data using the script:
+
+python setup_test_data.py
+
+--
+
+To run a full test, run:
+
+ataqc run_all --samples ../git/ataqc/tests/test_mouse_reads-250k/test_mouse_reads-250k.datasheet.txt --species ../git/ataqc/examples/species.json -o blah_2 --prefix blah_2 --encode
+
+--
+
+To run a legacy test:
+
+ataqc run_legacy --species /srv/scratch/shared/indra/dskim89/home/git/ataqc/examples/species.json --genome mm9 --name test_nouse_reads-250k --fastq1 /srv/scratch/shared/indra/dskim89/home/git/ataqc/tests/test_mouse_reads-250k/fastq/mouse_250Kreads_rep1.1.fastq.gz --fastq2 /srv/scratch/shared/indra/dskim89/home/git/ataqc/tests/test_mouse_reads-250k/fastq/mouse_250Kreads_rep1.2.fastq.gz --raw_bam /srv/scratch/shared/indra/dskim89/home/git/ataqc/tests/test_mouse_reads-250k/align/rep1/mouse_250Kreads_rep1.1.trim.PE2SE.bam --alignment_log /srv/scratch/shared/indra/dskim89/home/git/ataqc/tests/test_mouse_reads-250k/qc/rep1/mouse_250Kreads_rep1.1.trim.PE2SE.align.log --dup_log /srv/scratch/shared/indra/dskim89/home/git/ataqc/tests/test_mouse_reads-250k/qc/rep1/mouse_250Kreads_rep1.1.trim.PE2SE.dup.qc --pbc_log /srv/scratch/shared/indra/dskim89/home/git/ataqc/tests/test_mouse_reads-250k/qc/rep1/mouse_250Kreads_rep1.1.trim.PE2SE.nodup.pbc.qc --final_bam /srv/scratch/shared/indra/dskim89/home/git/ataqc/tests/test_mouse_reads-250k/align/rep1/mouse_250Kreads_rep1.1.trim.PE2SE.nodup.bam --final_bed /srv/scratch/shared/indra/dskim89/home/git/ataqc/tests/test_mouse_reads-250k/align/rep1/mouse_250Kreads_rep1.1.trim.PE2SE.nodup.tn5.tagAlign.gz --bigwig /srv/scratch/shared/indra/dskim89/home/git/ataqc/tests/test_mouse_reads-250k/signal/macs2/rep1/mouse_250Kreads_rep1.1.trim.PE2SE.nodup.tn5.pf.pval.signal.bigwig --peaks overlap=/srv/scratch/shared/indra/dskim89/home/git/ataqc/tests/test_mouse_reads-250k/peak/macs2/overlap/mouse_250Kreads_rep1.1.trim.PE2SE.nodup.tn5.pf.pval0.1.500K.naive_overlap.filt.narrowPeak.gz raw=/srv/scratch/shared/indra/dskim89/home/git/ataqc/tests/test_mouse_reads-250k/peak/macs2/rep1/mouse_250Kreads_rep1.1.trim.PE2SE.nodup.tn5.pf.narrowPeak.gz --encode -o blah_3 --prefix blah_3
+
+--
+
+To run a TSS enrich test:
+
+ataqc run_tss --species /srv/scratch/shared/indra/dskim89/home/git/ataqc/examples/species.json --genome mm9 --final_bam /srv/scratch/shared/indra/dskim89/home/git/ataqc/tests/test_mouse_reads-250k/align/rep1/mouse_250Kreads_rep1.1.trim.PE2SE.nodup.bam -o blah_4 --prefix blah_4
+
+
+--
+
+
 To run tests - at the top level of ataqc, run:
 
 python -m unittest discover -v

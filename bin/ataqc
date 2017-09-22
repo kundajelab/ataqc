@@ -11,6 +11,8 @@ import logging
 import time
 import pkg_resources
 
+from collections import OrderedDict
+
 from ataqc.util.io import sample_sheet_to_dict
 from ataqc.util.io import load_json_to_string_dict
 
@@ -83,6 +85,7 @@ def add_run_tss_parser(subparsers):
         help="run TSS enrichment only")
 
     argparser_tss.add_argument("--species", required=True, help="species json file")
+    argparser_tss.add_argument("--genome", required=True, help="which annotation set to use")
     argparser_tss.add_argument("--final_bam", help="Final filtered BAM file")
 
     add_output_options(argparser_tss)
@@ -98,19 +101,20 @@ def add_run_legacy_parser(subparsers):
         help="run legacy mode (every file as input arg)")
 
     argparser_legacy.add_argument("--species", required=True, help="species json file")
+    argparser_legacy.add_argument("--genome", required=True, help="which annotation set to use")
+    argparser_legacy.add_argument("--thresholds", default=pkg_resources.resource_filename('ataqc', 'data/thresholds.json'),
+                                  help="qc thresholds json file")
+    argparser_legacy.add_argument('--name', help='Name of sample')
     argparser_legacy.add_argument('--fastq1', help='First set of reads if paired end, or the single end reads')
     argparser_legacy.add_argument('--fastq2', help='Second set of reads if paired end')
-    argparser_legacy.add_argument('--aligned_bam', help='BAM file from the aligner')
+    argparser_legacy.add_argument('--raw_bam', help='BAM file from the aligner')
     argparser_legacy.add_argument('--alignment_log', help='Alignment log')
-    argparser_legacy.add_argument('--coordsort_bam', help='BAM file sorted by coordinate')
     argparser_legacy.add_argument('--dup_log', help='Picard duplicate metrics file')
     argparser_legacy.add_argument('--pbc_log', help='ENCODE library complexity metrics file')
     argparser_legacy.add_argument('--final_bam', help='Final filtered BAM file')
     argparser_legacy.add_argument('--final_bed', help='Final filtered alignments in BED format')
     argparser_legacy.add_argument('--bigwig', help='Final bigwig')
-    argparser_legacy.add_argument('--peaks', help='Raw Peak file')
-    argparser_legacy.add_argument('--naive_overlap_peaks', default=None, help='Naive overlap peak file')
-    argparser_legacy.add_argument('--idr_peaks', default=None, help='IDR peak file')
+    argparser_legacy.add_argument('--peaks', nargs="+", help='Raw Peak file')
     argparser_legacy.add_argument('--use_sambamba_markdup', action='store_true', help='Use sambamba markdup instead of Picard')
 
     argparser_legacy.add_argument("--encode", action="store_true", help="only run ENCODE QC")
@@ -129,7 +133,7 @@ def run_checks():
 
 
 def run_metrics(sample, species_files, out_dir, prefix, encode=False):
-    """Run all QC
+    """Run metrics
     """
     os.system("mkdir -p {}".format(out_dir))
     prefix = "{}/{}".format(out_dir, prefix)
@@ -141,11 +145,11 @@ def run_metrics(sample, species_files, out_dir, prefix, encode=False):
     # run BAM file QC
     logging.info("getting metrics on BAM files...")
     if sample["raw_bam"] is not None:
-        raw_aligned_bam = AlignedReads('raw_bam', sample, False, species_files, prefix)
+        raw_aligned_bam = AlignedReads(sample["raw_bam"], False, species_files, prefix, dup_log=sample["dup_log"], pbc_log=sample["pbc_log"])
         metrics['raw_bam'] = raw_aligned_bam.run_metrics(encode=encode)
         
     if sample["final_bam"] is not None:
-        final_aligned_bam = AlignedReads('final_bam', sample, True, species_files, prefix)
+        final_aligned_bam = AlignedReads(sample['final_bam'], True, species_files, prefix)
         metrics['final_bam'] = final_aligned_bam.run_metrics(encode=encode)
 
     # run peaks QC
@@ -161,6 +165,34 @@ def run_metrics(sample, species_files, out_dir, prefix, encode=False):
     metrics['integrative'] = integrative.run_metrics(metrics, sample, species_files, prefix, encode)
 
     return metrics
+
+
+def run_pipeline(sample, species_files, thresholds, out_dir, prefix, encode=False):
+    """Run metrics, run QC checks, output to html and text
+    """
+    metrics = run_metrics(
+        sample,
+        species_files,
+        out_dir,
+        prefix,
+        encode=encode)
+    qc_groups = run_qc(
+        metrics,
+        thresholds,
+        sample,
+        "{}/{}".format(out_dir, prefix),
+        sample["name"],
+        encode)
+    write_html(
+        qc_groups,
+        "{}/{}".format(out_dir, prefix),
+        sample["name"])
+    write_text(
+        qc_groups,
+        "{}/{}".format(out_dir, prefix),
+        sample["name"])
+
+    return
 
 
 def track_runs(args):
@@ -200,32 +232,49 @@ def main():
         samples = sample_sheet_to_dict(args.samples)
 
         for sample in samples:
-            metrics = run_metrics(
+            run_pipeline(
                 sample,
                 species_files[sample["genome"]],
+                thresholds[sample["genome"]],
                 args.out_dir,
                 args.prefix,
                 encode=args.encode)
-            qc_groups = run_qc(
-                metrics,
-                thresholds[sample["genome"]],
-                sample,
-                "{}/{}".format(args.out_dir, args.prefix),
-                sample["name"],
-                args.encode)
-            write_html(qc_groups,
-                           "{}/{}".format(args.out_dir, args.prefix),
-                           sample["name"])
-            write_text(qc_groups,
-                           "{}/{}".format(args.out_dir, args.prefix),
-                           sample["name"])
             
     elif subcommand == "run_tss":
-        pass
-    elif subcommand == "run_legacy":
-        
-        pass
+        species_files = load_json_to_string_dict(args.species)
+        final_aligned_bam = AlignedReads(args.final_bam, True, species_files[args.genome], args.prefix)
+        tss_enrich = final_aligned_bam.tss_enrichment()
+        print "TSS Enrichment: {}".format(tss_enrich)
 
+    elif subcommand == "run_legacy":
+        species_files = load_json_to_string_dict(args.species)
+        thresholds = load_json_to_string_dict(args.thresholds)
+
+        # set up sample here:
+        sample = OrderedDict([
+            ("name", args.name),
+            ("genome", args.genome),
+            ("fastq1", args.fastq1),
+            ("fastq2", args.fastq2),
+            ("raw_bam", args.raw_bam),
+            ("alignment_log", args.alignment_log),
+            ("dup_log", args.dup_log),
+            ("pbc_log", args.pbc_log),
+            ("final_bam", args.final_bam),
+            ("final_bed", args.final_bed),
+            ("bigwig", args.bigwig),
+            ("peaks", OrderedDict([peak.split("=") for peak in args.peaks]))
+        ])
+
+        # run sample
+        run_pipeline(
+            sample,
+            species_files[sample["genome"]],
+            thresholds[sample["genome"]],
+            args.out_dir,
+            args.prefix,
+            encode=args.encode)
+        
     end = time.time()
     logging.info("DONE: {}".format(end - start))
 

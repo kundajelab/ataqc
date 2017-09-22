@@ -272,13 +272,14 @@ def write_text(qc_groups, outprefix, sample_name, write_mode="w"):
 
     with open("{0}.ataqc.report.txt".format(outprefix), write_mode) as fp:
 
+        header = []
+        thresholds = []
+        metrics_and_qc = []
+        
         for qc_group in qc_groups:
 
             qc_ordered_dict = qc_group.get_qc()
 
-            header = []
-            thresholds = []
-            metrics_and_qc = []
             for key, qc_object in qc_ordered_dict.iteritems():
                 if qc_object['type'] == 'plot':
                     continue
@@ -291,9 +292,9 @@ def write_text(qc_groups, outprefix, sample_name, write_mode="w"):
                         qc_vals = ["" if val is None else val for val in qc_value_list]
                         print qc_vals[0]
                         header.append(qc_vals[0])
-                        thresholds.append("Cutoff: {}".format(qc_vals[1]))
+                        thresholds.append("Cutoff: {}".format(qc_vals[1]) if qc_vals[1] != "" else "")
                         
-                        if isinstance(qc_vals[2], collections.Iterable):
+                        if isinstance(qc_vals[2], collections.Iterable) and not isinstance(qc_vals[2], basestring):
                             metric_values = qc_vals[2]
                         else:
                             metric_values = [qc_vals[2]]
@@ -302,13 +303,15 @@ def write_text(qc_groups, outprefix, sample_name, write_mode="w"):
                                 header.append("{}_{}".format(qc_vals[0], val_idx+1))
                                 thresholds.append("")
                             metrics_and_qc.append(metric_values[val_idx])
-                            
-                        header.append("{}_qc".format(qc_vals[0]))
-                        thresholds.append("")
-                        if qc_vals[3] == True:
-                            metrics_and_qc.append("PASS")
-                        else:
-                            metrics_and_qc.append("FAIL")
+
+                        if qc_vals[1] != "":
+                            # There is a cutoff so add in the QC check
+                            header.append("{}_qc".format(qc_vals[0]))
+                            thresholds.append("")
+                            if qc_vals[3] == True:
+                                metrics_and_qc.append("PASS")
+                            else:
+                                metrics_and_qc.append("FAIL")
                             
         if write_mode == "w":
             fp.write("{}\n".format("\t".join(header)))
