@@ -5,6 +5,8 @@ import collections
 
 
 def flatten_list(value_list):
+    """Flatten a list
+    """
     for elem in value_list:
         if isinstance(elem, collections.Iterable) and not isinstance(elem, basestring):
             for sub in flatten_list(elem):
@@ -236,7 +238,8 @@ def qc_to_html(qc_object):
 
 
 def write_html(qc_groups, outprefix, sample_name):
-
+    """Render HTML output (from QC groups)
+    """
     rendered = ""
 
     # write title and other useful stuff
@@ -262,25 +265,52 @@ def write_html(qc_groups, outprefix, sample_name):
 
     return None
 
-def write_text(qc_groups, outprefix, sample_name):
 
-    text_file = open('{0}_qc.txt'.format(outprefix), 'w')
+def write_text(qc_groups, outprefix, sample_name, write_mode="w"):
+    """Write data out to text file
+    """
 
-    for qc_group in qc_groups:
+    with open("{0}_qc.txt".format(outprefix), write_mode) as fp:
 
-        qc_ordered_dict = qc_group.get_qc()
+        for qc_group in qc_groups:
 
-        for key, qc_object in qc_ordered_dict.iteritems():
-            if qc_object['type'] != 'plot':
+            qc_ordered_dict = qc_group.get_qc()
+
+            header = []
+            thresholds = []
+            metrics_and_qc = []
+            for key, qc_object in qc_ordered_dict.iteritems():
+                if qc_object['type'] == 'plot':
+                    continue
+                
                 if isinstance(qc_object['qc'], basestring):
-                    text_file.write('{0} \n'.format(qc_object['qc']))
-                elif isinstance(qc_object['qc'], collections.OrderedDict):
+                    continue
+                    
+                if isinstance(qc_object['qc'], collections.OrderedDict):
                     for field, qc_value_list in qc_object['qc'].iteritems():
-                        if qc_object['flatten'] == True:
-                            qc_value_list = flatten_list(qc_value_list)
-                        for value in qc_value_list:
-                            if value is not None:
-                                text_file.write('{0}\t'.format(value))
-                        text_file.write('\n')
+                        qc_vals = ["" if val is None else val for val in qc_value_list]
+                        print qc_value_list[0]
+                        header.append(qc_vals[0])
+                        thresholds.append(qc_vals[1])
+                        
+                        if isinstance(qc_vals[2], collections.Iterable):
+                            metric_values = qc_vals[2]
+                        else:
+                            metric_values = [qc_vals[2]]
+                        for val_idx in range(len(metric_values)):
+                            if val_idx >= 1:
+                                header.append("{}_{}".format(qc_vals[0], val_idx+1))
+                                thresholds.append("")
+                            metrics_and_qc.append(metric_values[val_idx])
+                            
+                        header.append("{}_qc".format(qc_vals[0]))
+                        thresholds.append("")
+                        metrics_and_qc.append(qc_vals[3])
 
-    text_file.close()
+        if write_mode == "w":
+            fp.write("{}\n".format("\t".join(header)))
+            fp.write("{}\n".format("\t".join(thresholds)))
+                
+        fp.write("{}\n".format("\t".join(str(val) for val in metrics_and_qc)))
+
+    return

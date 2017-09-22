@@ -199,9 +199,7 @@ def main():
         species_files = load_json_to_string_dict(args.species)
         thresholds = load_json_to_string_dict(args.thresholds)
         samples = sample_sheet_to_dict(args.samples)
-        print thresholds
-        
-        quit()
+
         for sample in samples:
             metrics = run_metrics(
                 sample,
@@ -211,6 +209,7 @@ def main():
                 encode=args.encode)
             qc_groups = run_qc(
                 metrics,
+                thresholds[sample["genome"]],
                 sample,
                 "{}/{}".format(args.out_dir, args.prefix),
                 sample["name"],

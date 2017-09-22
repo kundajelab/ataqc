@@ -1,24 +1,27 @@
-#!user/bin/env python
+# description: 
+
+import os
+import abc
+import six
+import logging
+
+import numpy as np
+import pandas as pd
 
 from collections import namedtuple
 from collections import OrderedDict
-import abc
-import six
-import numpy as np
-import pandas as pd
-import logging
-import os
 
 from matplotlib import pyplot as plt
 from io import BytesIO
 from base64 import b64encode
 
-# Base class
+
 class QCGroup(object):
+    """Base class for QC groups"""
     
-    # Initialize class attributes
-    def __init__(self, metrics, data_files, outprefix):
+    def __init__(self, metrics, thresholds, data_files, outprefix):
         self.metrics = metrics
+        self.thresholds = thresholds
         self.data_files = data_files
         self.outprefix = outprefix
         self.qc = OrderedDict()
@@ -28,22 +31,23 @@ class QCGroup(object):
 
     def get_description(self):
         pass
-
+    
     def get_metrics(self):
         pass
 
     def run_qc(self):
         pass
 
-    # Returns OrderedDict attribute that contains all the QC metrics
     def get_qc(self):
+        """Return OrderedDict of all QC
+        """
         return self.qc
 
 
 class SampleInfo(QCGroup):
 
-    def __init__(self, metrics, data_files, outprefix, sample_name):
-        super(SampleInfo, self).__init__(metrics, data_files, outprefix)
+    def __init__(self, metrics, thresholds, data_files, outprefix, sample_name):
+        super(SampleInfo, self).__init__(metrics, thresholds, data_files, outprefix)
         self.sample_name = sample_name
 
     def get_name(self):
@@ -199,7 +203,6 @@ class Fingerprints(QCGroup):
 
 
 class AlignmentStats(QCGroup):
-# TODO: Get bowtie stats and samtool flagstats
     
     def get_name(self):
         return "Alignment Stats"
@@ -278,12 +281,13 @@ class FilteringStats(QCGroup):
                                                          (self.metrics['integrative']['final_reads']))
         ])
 
-        self.qc['filter_table'] = {'qc': filter_table,
-                                   'type': 'table',
-                                   'header': 'Filtering Statistics',
-                                   'description': self.get_description(),
-                                   'table_header': table_header,
-                                   'flatten': flatten_table}
+        self.qc['filter_table'] = {
+            'qc': filter_table,
+            'type': 'table',
+            'header': 'Filtering Statistics',
+            'description': self.get_description(),
+            'table_header': table_header,
+            'flatten': flatten_table}
 
 #   EDIT
 class FragmentLengthStats(QCGroup):
@@ -330,24 +334,27 @@ class FragmentLengthStats(QCGroup):
         fragment_len_dist_plot = self.metrics['final_bam']['fragment_len'][3]
 
         # Setup dictionary for parsing into HTML
-        self.qc['fragment_len_dist_plot'] = {'qc': fragment_len_dist_plot,
-                                             'type': 'plot',
-                                             'header': 'Fragment Length Distribution',
-                                             'description': None}
+        self.qc['fragment_len_dist_plot'] = {
+            'qc': fragment_len_dist_plot,
+            'type': 'plot',
+            'header': 'Fragment Length Distribution',
+            'description': None}
                                              
-        self.qc['fragment_len_peak_table'] = {'qc': fragment_len_peak_table,
-                                              'type': 'table',
-                                              'header': 'Nucleosomal Fragment Peaks',
-                                              'description': None,
-                                              'table_header': table_header_peaks,
-                                              'flatten': flatten_len_peak_table}
+        self.qc['fragment_len_peak_table'] = {
+            'qc': fragment_len_peak_table,
+            'type': 'table',
+            'header': 'Nucleosomal Fragment Peaks',
+            'description': None,
+            'table_header': table_header_peaks,
+            'flatten': flatten_len_peak_table}
 
-        self.qc['fragment_len_stats_table'] = { 'qc': fragment_len_stats_table,
-                                                'type': 'table',
-                                                'header': 'Fragment Length Statistics',
-                                                'description': self.get_description(),
-                                                'table_header': table_header_frag_stats,
-                                                'flatten': flatten_len_stats_table}
+        self.qc['fragment_len_stats_table'] = {
+            'qc': fragment_len_stats_table,
+            'type': 'table',
+            'header': 'Fragment Length Statistics',
+            'description': self.get_description(),
+            'table_header': table_header_frag_stats,
+            'flatten': flatten_len_stats_table}
 
 
 class PeakStats(QCGroup):
@@ -400,12 +407,13 @@ class PeakStats(QCGroup):
         for peak_key in self.metrics["peaks"].keys():
             peak_name = "{}_peaks".format(peak_key)
             peak_qc_table[peak_name] = QCGreaterThanEqualCheck(peak_name, 10000)(self.metrics['peaks'][peak_key]['peak_count'])
-        self.qc['peak_qc'] = {'qc': peak_qc_table,
-                              'type': 'table',
-                              'header': 'Peak QC',
-                              'description': self.get_description(),
-                              'table_header': table_header,
-                              'flatten': flatten_table}
+        self.qc['peak_qc'] = {
+            'qc': peak_qc_table,
+            'type': 'table',
+            'header': 'Peak QC',
+            'description': self.get_description(),
+            'table_header': table_header,
+            'flatten': flatten_table}
 
 
 class GCBias(QCGroup):
@@ -462,10 +470,11 @@ class GCBias(QCGroup):
         img_src = '{0}_gc.txt'.format(self.outprefix)
         gc_bias_plot = plot_gc(img_src)
 
-        self.qc['gc_bias_plot'] = {'qc': gc_bias_plot,
-                                   'type': 'plot',
-                                   'header': 'GC Bias',
-                                   'description': self.get_description()}
+        self.qc['gc_bias_plot'] = {
+            'qc': gc_bias_plot,
+            'type': 'plot',
+            'header': 'GC Bias',
+            'description': self.get_description()}
 
 
 
@@ -504,25 +513,28 @@ class AnnotationQualStats(QCGroup):
             annot_enrich_table["Fraction of reads in {}".format(annotation_key)] = QCNoCheck(
                 "Fraction of reads in {}".format(annotation_key))(self.metrics['integrative']['annotation_enrichments'][annotation_key])
 
-        self.qc['annot_enrich_plot'] = {'qc': annot_enrich_plot,
-                                        'type': 'plot',
-                                        'header': 'Enrichment Plot (TSS)',
-                                        'description': plot_description}
-
-        self.qc['annot_enrich_table'] = {'qc': annot_enrich_table,
-                                         'type': 'table',
-                                         'header': 'Annotated Genomic Region Enrichments',
-                                         'description': self.get_description(),
-                                         'table_header': table_header,
-                                         'flatten': flatten_table}
+        self.qc['annot_enrich_plot'] = {
+            'qc': annot_enrich_plot,
+            'type': 'plot',
+            'header': 'Enrichment Plot (TSS)',
+            'description': plot_description}
+        
+        self.qc['annot_enrich_table'] = {
+            'qc': annot_enrich_table,
+            'type': 'table',
+            'header': 'Annotated Genomic Region Enrichments',
+            'description': self.get_description(),
+            'table_header': table_header,
+            'flatten': flatten_table}
 
 
 class EncodeStats(QCGroup):
 
-    def __init__(self, metrics, data_files, outprefix, tss_cutoff):
-        super(EncodeStats, self).__init__(metrics, data_files, outprefix)
+    def __init__(self, metrics, thresholds, data_files, outprefix, tss_cutoff=6):
+        super(EncodeStats, self).__init__(metrics, thresholds, data_files, outprefix)
         self.tss_cutoff = tss_cutoff
-    
+
+        
     def get_metrics(self):
 
         raw_read_count = self.metrics['raw_bam']['read_count']
@@ -539,12 +551,11 @@ class EncodeStats(QCGroup):
             peak_counts.append((peak_key, peak_count))
             
         tss_enrichment_val = self.metrics['final_bam']['tss_enrich'][2]
-        tss_cutoff = self.tss_cutoff
 
         if (self.metrics['raw_bam']['is_paired'] == 'Paired-ended'):
-            min_read_count = 50000000
+            num_aligned_reads_thresh_string = "num_aligned_reads_pe"
         else:
-            min_read_count = 25000000
+            num_aligned_reads_thresh_string = "num_aligned_reads_se"
 
         nuc_range_metrics = [('Presence of NFR peak', 20, 90),
                          ('Presence of Mono-Nucleosomal peak', 120, 250)]
@@ -552,55 +563,67 @@ class EncodeStats(QCGroup):
         # Perform QC checks
         table_header_stats = ['Metric', 'Value', 'QC Passed', 'QC Result']
         flatten_stats_table = True
-        stats_table = OrderedDict([
-            ('Number of Aligned Reads', QCGreaterThanEqualCheck('Number of Aligned Reads', min_read_count)
-                                                               (aligned_read_count)),
-            ('Percentage of Mapped Reads (Alignment Rate)', QCGreaterThanEqualCheck('Percentage of Mapped Reads (Alignment Rate)', 0.95)
-                                                                                   (aligned_read_count / raw_read_count)),
-            ('Non-Redundant Fraction (NRF)', QCGreaterThanEqualCheck('Non-Redundant Fraction (NRF)', 0.9)
-                                                    (encode_metrics['NRF'])),
-            ('PCR Bottlenecking Coefficient 1 (PBC1)', QCGreaterThanEqualCheck('PCR Bottlenecking Coefficient 1 (PBC1)', 0.9)
-                                                                              (encode_metrics['PBC1'])),
-            ('PCR Bottlenecking Coefficient 2 (PBC2)', QCGreaterThanEqualCheck('PCR Bottlenecking Coefficient 2 (PBC2)', 3)
-                                                                              (encode_metrics['PBC2'])),
-            ('TSS Enrichment Value', QCGreaterThanEqualCheck('TSS Enrichment Value', tss_cutoff)
-                                                            (tss_enrichment_val)),
-            ("Fraction of reads in called peak regions", QCNoCheck("Fraction of reads in called peak regions")
-                                                                  (self.metrics['integrative']['annotation_enrichments']['called_peaks']))
-            ])
 
+        encode_table_metrics = OrderedDict([
+            (num_aligned_reads_thresh_string, aligned_read_count),
+            ("fract_aligned_reads", aligned_read_count / raw_read_count),
+            ("nrf", encode_metrics["NRF"]),
+            ("pbc1", encode_metrics["PBC1"]),
+            ("pbc2", encode_metrics["PBC2"]),
+            ("tss-enrich", tss_enrichment_val),
+            ("frip", self.metrics["integrative"]["annotation_enrichments"]["called_peaks"])
+        ])
+        
+        stats_table = OrderedDict()
+        for encode_metric, val in encode_table_metrics.items():
+            if self.thresholds[encode_metric]["check"] == "greater_than":
+                stats_table[self.thresholds[encode_metric]["name"]] = QCGreaterThanEqualCheck(
+                    encode_metric, self.thresholds[encode_metric]["val"])(val)
+            elif self.thresholds[encode_metric]["check"] == "less_than":
+                stats_table[self.thresholds[encode_metric]["name"]] = QCLessThanEqualCheck(
+                    encode_metric, self.thresholds[encode_metric]["val"])(val)
+            elif self.thresholds[encode_metric]["check"] == "none":
+                stats_table[self.thresholds[encode_metric]["name"]] = QCNoCheck(
+                    encode_metric)(val)
+                
         # add in the peaks
         for peak_key, peak_count in peak_counts:
             stats_table["{} count".format(peak_key)] = QCGreaterThanEqualCheck('{} count'.format(peak_key), 150000)(peak_count)
 
         table_header_peaks = ['Metric', 'Peak Set', 'Selected Peak', 'QC']
         flatten_peak_table = False
-        fragment_len_peak_table = OrderedDict([
-            ('Presence of NFR', QCHasElementInRange(*nuc_range_metrics[0])
-                                                    (self.metrics['final_bam']['fragment_len'][2])),
-            ('Presence of Mono-Nucleosomal Peak', QCHasElementInRange(*nuc_range_metrics[1])
-                                                                    (self.metrics['final_bam']['fragment_len'][2]))
-            ])
 
+        fragment_len_table_metrics = OrderedDict([
+            ("nfr_presence", self.metrics["final_bam"]["fragment_len"][2]),
+            ("mono_nuc_presence", self.metrics["final_bam"]["fragment_len"][2]),
+            
+        ])
+
+        fragment_len_peak_table = OrderedDict()
+        for metric, val in fragment_len_table_metrics.items():
+            fragment_len_peak_table[self.thresholds[metric]["name"]] = QCHasElementInRange(
+                metric, *self.thresholds[metric]["val"])(val)
 
         # Setup dictionary for parsing into HTML
-        self.qc['stats_table'] = {'qc': stats_table,
-                                  'type': 'table',
-                                  'header': 'Thresholding',
-                                  'description': None,
-                                  'table_header': table_header_stats,
-                                  'flatten': flatten_stats_table}
+        self.qc['stats_table'] = {
+            'qc': stats_table,
+            'type': 'table',
+            'header': 'Thresholding',
+            'description': None,
+            'table_header': table_header_stats,
+            'flatten': flatten_stats_table}
 
-        self.qc['peak_table'] = {'qc': fragment_len_peak_table,
-                                 'type': 'table',
-                                 'header': 'Peak Presence',
-                                 'description': None,
-                                 'table_header': table_header_peaks,
-                                 'flatten': flatten_peak_table}
+        self.qc['peak_table'] = {
+            'qc': fragment_len_peak_table,
+            'type': 'table',
+            'header': 'Peak Presence',
+            'description': None,
+            'table_header': table_header_peaks,
+            'flatten': flatten_peak_table}
         
 
 
-QCResult = namedtuple('QCResult', ['metric', 'value', 'qc_pass', 'message'])
+QCResult = namedtuple('QCResult', ['metric', 'threshold', 'value', 'qc_pass', 'message'])
 INF = float("inf")
 
 
@@ -611,13 +634,16 @@ class QCCheck(object):
     def check(self, value):
         return True
 
+    def threshold(self):
+        return None
+    
     def message(self, value, qc_pass):
         return 'OK' if qc_pass else 'Failed'
 
     def __call__(self, value):
         qc_pass = self.check(value)
-        return QCResult(self.metric, value, qc_pass,
-                        self.message(value, qc_pass))
+        threshold = self.threshold()
+        return QCResult(self.metric, threshold, value, qc_pass, self.message(value, qc_pass))
 
 
 class QCIntervalCheck(QCCheck):
@@ -637,14 +663,25 @@ class QCIntervalCheck(QCCheck):
                 'Out of range [{}, {}]'.format(self.lower,
                                             self.upper))
 
+    
 class QCLessThanEqualCheck(QCIntervalCheck):
     def __init__(self, metric, upper):
-        super(QCLessThanEqualCheck, self).__init__(metric, -INF, upper)        
+        super(QCLessThanEqualCheck, self).__init__(metric, -INF, upper)
 
+    def threshold(self):
+        return "<{}".format(self.upper)
+        
+
+        
 class QCGreaterThanEqualCheck(QCIntervalCheck):
     def __init__(self, metric, lower):
         super(QCGreaterThanEqualCheck, self).__init__(metric, lower, INF)
 
+    def threshold(self):
+        return ">{}".format(self.lower)
+
+        
+        
 class QCHasElementInRange(QCCheck):
     def __init__(self, metric, lower, upper):
         super(QCHasElementInRange, self).__init__(metric)
@@ -652,8 +689,12 @@ class QCHasElementInRange(QCCheck):
         self.upper = upper
         
     def check(self, elems):
-        return [elem for elem in elems
-                     if self.lower <= elem <= self.upper]
+        pass_elems = [elem for elem in elems
+                      if self.lower <= elem <= self.upper]
+        return len(pass_elems) > 0
+
+    def threshold(self):
+        return "{}-{}".format(self.lower, self.upper)
 
     def message(self, elems, qc_pass):
         return ('OK - Peak @ {} in peak set {} in range [{}, {}]'.format(qc_pass,
@@ -664,11 +705,15 @@ class QCHasElementInRange(QCCheck):
                 'Cannot find element in range [{}, {}]'.format( self.lower, 
                                                                 self.upper))
 
-# Convert to list then string to preserve commas that are removed from the array to string conversion,
-# and to avoid flattening during the HTML parse (strings aren't 'flattened')
+    # Convert to list then string to preserve commas that are removed from the array to string conversion,
+    # and to avoid flattening during the HTML parse (strings aren't 'flattened')
     def __call__(self, value):
         qc_pass = self.check(value)
-        return QCResult(self.metric, str(list(value)), qc_pass,    
+        threshold = self.threshold()
+        return QCResult(self.metric,
+                        threshold,
+                        value,
+                        qc_pass,    
                         self.message(str(list(value)), qc_pass))
 
 class QCNoCheck(QCCheck):
@@ -677,35 +722,37 @@ class QCNoCheck(QCCheck):
 
     def __call__(self, value):
         qc_pass = self.check(value)
-        return QCResult(self.metric, value, None, None)
+        return QCResult(self.metric, None, value, None, None)
 
 
-def run_qc(metrics, data_files, outprefix, sample_name, encode_only=False):
+def run_qc(metrics, thresholds, data_files, outprefix, sample_name, encode_only=False):
 
     if not encode_only:
-        sample_info = SampleInfo(metrics, data_files, outprefix, sample_name)
-        summary_read_stats = SummaryReadStats(metrics, data_files, outprefix)
-        alignment_stats = AlignmentStats(metrics, data_files, outprefix)
-        fingerprints_plot = Fingerprints(metrics, data_files, outprefix)
-        filtering_stats = FilteringStats(metrics, data_files, outprefix)
-        fragment_len_stats = FragmentLengthStats(metrics, data_files, outprefix)
-        peak_stats = PeakStats(metrics, data_files, outprefix)
-        gc_bias_plot = GCBias(metrics, data_files, outprefix)
-        annot_enrich_stats = AnnotationQualStats(metrics, data_files, outprefix)
+        sample_info = SampleInfo(metrics, thresholds, data_files, outprefix, sample_name)
+        summary_read_stats = SummaryReadStats(metrics, thresholds, data_files, outprefix)
+        alignment_stats = AlignmentStats(metrics, thresholds, data_files, outprefix)
+        fingerprints_plot = Fingerprints(metrics, thresholds, data_files, outprefix)
+        filtering_stats = FilteringStats(metrics, thresholds, data_files, outprefix)
+        fragment_len_stats = FragmentLengthStats(metrics, thresholds, data_files, outprefix)
+        peak_stats = PeakStats(metrics, thresholds, data_files, outprefix)
+        gc_bias_plot = GCBias(metrics, thresholds, data_files, outprefix)
+        annot_enrich_stats = AnnotationQualStats(metrics, thresholds, data_files, outprefix)
         
-        qc_groups = [sample_info,
-                summary_read_stats, 
-                alignment_stats,
-                fingerprints_plot,
-                filtering_stats,
-                fragment_len_stats,
-                peak_stats,
-                gc_bias_plot,
-                annot_enrich_stats]
+        qc_groups = [
+            sample_info,
+            summary_read_stats, 
+            alignment_stats,
+            fingerprints_plot,
+            filtering_stats,
+            fragment_len_stats,
+            peak_stats,
+            gc_bias_plot,
+            annot_enrich_stats]
 
-    elif encode_only:
-        encode_stats = EncodeStats(metrics, data_files, outprefix, 5)
-        qc_groups = [encode_stats]
+    else:
+        encode_stats = EncodeStats(metrics, thresholds, data_files, outprefix, thresholds)
+        qc_groups = [
+            encode_stats]
 
     for qc_group in qc_groups:
         qc_group.get_metrics()

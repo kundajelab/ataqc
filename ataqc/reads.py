@@ -539,6 +539,14 @@ class AlignedReads():
 
         plot_b64 = fragment_length_plot(insert_data)
 
+        # adjust peaks to make sure that they show up the same in the QC charts
+        # look for up to quartern-nucleosomal
+        if len(peaks) < 4:
+            while len(peaks) != 4:
+                peaks.append(-1)
+        elif len(peaks) > 4:
+            peaks = peaks[0:4]
+            
         return percent_nfr, percent_nfr_vs_mono_nuc, peaks, plot_b64
 
 
