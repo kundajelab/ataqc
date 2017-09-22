@@ -4,10 +4,11 @@
 """
 
 import os
+import sys
 import argparse
 import json
 import logging
-import timeit
+import time
 
 from ataqc.util.io import sample_sheet_to_dict
 from ataqc.util.io import load_json_to_string_dict
@@ -160,13 +161,35 @@ def run_metrics(sample, species_files, out_dir, prefix, encode=False):
     return metrics
 
 
+def track_runs(args):
+    """track command and github commit
+    """
+    # keeps track of restores (or different commands) in folder
+    logging_file = '{0}/{1}.ataqc.log'.format(args.out_dir, args.prefix)
+    
+    # track github commit
+    git_repo_path = os.path.dirname(os.path.realpath(__file__))
+    os.system('echo "commit:" > {0}'.format(logging_file))
+    os.system('git -C {0} rev-parse HEAD >> {1}'.format(git_repo_path, logging_file))
+    os.system('echo "" >> {0}'.format(logging_file))
+    
+    # write out the command
+    with open(logging_file, 'a') as f:
+        f.write(' '.join(sys.argv)+'\n\n')
+        
+    return logging_file
+
+
 def main():
     """Main function for running ataqc functions
     """
     args = parse_args()
+    os.system("mkdir -p {}".format(args.out_dir))
+    logging_file = track_runs(args)
+    logging.basicConfig(filename=logging_file, level=logging.DEBUG)
+    
     subcommand = args.subcommand_name
-    logging.basicConfig(filename='{}/{}.ataqc.log'.format(args.out_dir, args.prefix), level=logging.DEBUG)
-    start = timeit.default_timer()
+    start = time.time()
 
     if subcommand == "run_all":
         # convert data sheet into a dict of arguments, then use run_legacy
@@ -197,6 +220,11 @@ def main():
     elif subcommand == "run_legacy":
         
         pass
+
+    end = time.time()
+    logging.info("DONE: {}".format(end - start))
+
+    return
 
 
 if __name__ == "__main__":

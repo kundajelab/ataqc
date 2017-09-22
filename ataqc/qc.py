@@ -533,9 +533,11 @@ class EncodeStats(QCGroup):
 
         encode_metrics = self.metrics['raw_bam']['encode_complexity']
 
-        rep_peak_count = self.metrics['peaks']['Raw Peaks']['peak_count']
-        idr_peak_count = self.metrics['peaks']['IDR Peaks']['peak_count']
-
+        peak_counts = []
+        for peak_key in self.metrics["peaks"].keys():
+            peak_count = self.metrics['peaks'][peak_key]['peak_count']
+            peak_counts.append((peak_key, peak_count))
+            
         tss_enrichment_val = self.metrics['final_bam']['tss_enrich'][2]
         tss_cutoff = self.tss_cutoff
 
@@ -561,15 +563,15 @@ class EncodeStats(QCGroup):
                                                                               (encode_metrics['PBC1'])),
             ('PCR Bottlenecking Coefficient 2 (PBC2)', QCGreaterThanEqualCheck('PCR Bottlenecking Coefficient 2 (PBC2)', 3)
                                                                               (encode_metrics['PBC2'])),
-            ('Replicated Peak Count', QCGreaterThanEqualCheck('Replicated Peak Count', 150000)
-                                                             (rep_peak_count)),
-            ('IDR Peak Count', QCGreaterThanEqualCheck('IDR Peak Count', 70000)
-                                                      (idr_peak_count)),
             ('TSS Enrichment Value', QCGreaterThanEqualCheck('TSS Enrichment Value', tss_cutoff)
                                                             (tss_enrichment_val)),
             ("Fraction of reads in called peak regions", QCNoCheck("Fraction of reads in called peak regions")
-                                                                  (self.metrics['integrative']['annotation_enrichments']['Peaks']))
+                                                                  (self.metrics['integrative']['annotation_enrichments']['called_peaks']))
             ])
+
+        # add in the peaks
+        for peak_key, peak_count in peak_counts:
+            stats_table["{} count".format(peak_key)] = QCGreaterThanEqualCheck('{} count'.format(peak_key), 150000)(peak_count)
 
         table_header_peaks = ['Metric', 'Peak Set', 'Selected Peak', 'QC']
         flatten_peak_table = False

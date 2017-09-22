@@ -249,7 +249,7 @@ class AlignedReads():
                     PBC2 = float(l_list[6])
                     break
         else:
-            # TODO put in ENCODE calculations here
+            # TODO(dk) put in ENCODE calculations here
             pass
                 
         return {'NRF':NRF, 'PBC1':PBC1, 'PBC2':PBC2}
