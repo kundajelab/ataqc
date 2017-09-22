@@ -139,6 +139,7 @@ def run_metrics(sample, species_files, out_dir, prefix, encode=False):
     
     
     # run BAM file QC
+    logging.info("getting metrics on BAM files...")
     if sample["raw_bam"] is not None:
         raw_aligned_bam = AlignedReads('raw_bam', sample, False, species_files, prefix)
         metrics['raw_bam'] = raw_aligned_bam.run_metrics(encode=encode)
@@ -147,18 +148,16 @@ def run_metrics(sample, species_files, out_dir, prefix, encode=False):
         final_aligned_bam = AlignedReads('final_bam', sample, True, species_files, prefix)
         metrics['final_bam'] = final_aligned_bam.run_metrics(encode=encode)
 
-    print metrics
-
     # run peaks QC
+    logging.info("getting metrics on peak files...")
     metrics['peaks'] = {}
     for peak_key in sample['peaks'].keys():
         peak_bed = Peaks(sample['peaks'][peak_key], peak_key)
         metrics['peaks'][peak_key] = peak_bed.run_metrics(encode=encode)
 
-    print metrics
-        
     # run integrative QC
     # this module operates exclusively on the metrics dict
+    logging.info("getting integrative metrics...")
     metrics['integrative'] = integrative.run_metrics(metrics, sample, species_files, prefix, encode)
 
     return metrics

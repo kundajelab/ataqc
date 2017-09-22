@@ -270,7 +270,7 @@ def write_text(qc_groups, outprefix, sample_name, write_mode="w"):
     """Write data out to text file
     """
 
-    with open("{0}_qc.txt".format(outprefix), write_mode) as fp:
+    with open("{0}.ataqc.report.txt".format(outprefix), write_mode) as fp:
 
         for qc_group in qc_groups:
 
@@ -289,9 +289,9 @@ def write_text(qc_groups, outprefix, sample_name, write_mode="w"):
                 if isinstance(qc_object['qc'], collections.OrderedDict):
                     for field, qc_value_list in qc_object['qc'].iteritems():
                         qc_vals = ["" if val is None else val for val in qc_value_list]
-                        print qc_value_list[0]
+                        print qc_vals[0]
                         header.append(qc_vals[0])
-                        thresholds.append(qc_vals[1])
+                        thresholds.append("Cutoff: {}".format(qc_vals[1]))
                         
                         if isinstance(qc_vals[2], collections.Iterable):
                             metric_values = qc_vals[2]
@@ -305,8 +305,11 @@ def write_text(qc_groups, outprefix, sample_name, write_mode="w"):
                             
                         header.append("{}_qc".format(qc_vals[0]))
                         thresholds.append("")
-                        metrics_and_qc.append(qc_vals[3])
-
+                        if qc_vals[3] == True:
+                            metrics_and_qc.append("PASS")
+                        else:
+                            metrics_and_qc.append("FAIL")
+                            
         if write_mode == "w":
             fp.write("{}\n".format("\t".join(header)))
             fp.write("{}\n".format("\t".join(thresholds)))

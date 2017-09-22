@@ -566,7 +566,7 @@ class EncodeStats(QCGroup):
 
         encode_table_metrics = OrderedDict([
             (num_aligned_reads_thresh_string, aligned_read_count),
-            ("fract_aligned_reads", aligned_read_count / raw_read_count),
+            ("fract_aligned_reads", float(aligned_read_count) / raw_read_count),
             ("nrf", encode_metrics["NRF"]),
             ("pbc1", encode_metrics["PBC1"]),
             ("pbc2", encode_metrics["PBC2"]),
@@ -750,8 +750,10 @@ def run_qc(metrics, thresholds, data_files, outprefix, sample_name, encode_only=
             annot_enrich_stats]
 
     else:
+        sample_info = SampleInfo(metrics, thresholds, data_files, outprefix, sample_name)
         encode_stats = EncodeStats(metrics, thresholds, data_files, outprefix, thresholds)
         qc_groups = [
+            sample_info,
             encode_stats]
 
     for qc_group in qc_groups:

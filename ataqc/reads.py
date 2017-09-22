@@ -557,9 +557,9 @@ class AlignedReads():
         # always run (whether filtered or not)
         metrics['is_paired'] = self.paired_ended
         metrics['read_count'] = self.count()
-
+        metrics['read_length'] = self.read_length()
+        
         if not encode:
-            metrics['read_length'] = self.read_length()
             metrics['flagstat'] = self.samtools_flagstat
         
         if not self.is_filtered:

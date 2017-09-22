@@ -52,7 +52,6 @@ def get_annotation_enrichments(data_files, species_files, outprefix):
     final_reads_bed = data_files['final_bed']# Read 'final_reads_bed' field of data_files into variable
     annotation_enrichments = OrderedDict()
     for annotation_key, annotation_bed in species_files["annotations"].items():
-        print annotation_key
         if annotation_key == "tss":
             continue
         read_count, read_fract = get_fract_reads_in_regions(final_reads_bed, annotation_bed)
