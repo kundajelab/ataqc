@@ -25,8 +25,11 @@ from io import BytesIO
 
 plt.switch_backend('agg')
 
-class Reads():
 
+class Reads():
+    """This is a class intended to store information 
+    about FASTQ files
+    """
 
     def __init__(self, fastq_files):
         if len(fastq_files) == 1:
@@ -47,11 +50,14 @@ class Reads():
         else:
             return 2*(i+1)
 
+        
     def quality_fraction(self, threshold=20):
         # How to handle this? 
         return None
-        
+
+    
     def fastqc():
+        # TODO
         return None
 
     
@@ -60,8 +66,12 @@ class Reads():
 
     
 class AlignedReads():
-
+    """This is a class intended to store BAM files
+    """
+    
     def __init__(self, key, data_files, is_filtered, species_files, outprefix):
+        # TODO consider just extracting key relevant files instead of providing
+        # all data files
         bam_file = data_files[key]
 
         assert(bam_file.endswith('.bam'))
@@ -87,13 +97,18 @@ class AlignedReads():
                 
                 
     def count(self):
+        """Count number of total reads in BAM file
+        Relies on samtools
+        """
         logging.info("Getting read count in BAM file")
-        return int(subprocess.check_output(['samtools', 'view', '-c', self.bam_file]).strip())# '-c' option gives count of reads
+        return int(subprocess.check_output(
+            ['samtools', 'view', '-c', self.bam_file]).strip())
 
     
-    def read_length(self, sample_num=1000):# 1000 reads per bam file? Or this is just sufficient to get a good feel
+    def read_length(self, sample_num=1000):
+        """Determines read length based on a subsample
+        """
         logging.info('Getting read length from BAM file...')
-
         sample_count = 0
         total = 0
         with pysam.AlignmentFile(self.bam_file, 'rb') as bam:
@@ -108,26 +123,6 @@ class AlignedReads():
         return read_len
 
 
-    
-    # def mapped_count(self):
-    #     logging.info('samtools flagstat...')
-    #     results = pysam.flagstat(self.bam_file, split_lines=True)
-    #     flagstat = ''
-    #     for line in results:
-    #         logging.info(line.strip())
-    #         flagstat += line
-    #         if "mapped" in line and "mate" not in line:
-    #             mapped_reads = int(line.split('+')[0].strip())
-    #     return mapped_reads
-
-
-
-    # def mapped_count(self):
-    #     logging.info('samtools flagstat...')
-    #     return int(subprocess.check_output(['samtools', 'view', '-f', '2', '-c', self.bam_file]).strip())
-
-
-
     def mapped_count(self):
         mapped_reads = 0
         flagstat = self.samtools_flagstat.split('\n')
@@ -136,8 +131,7 @@ class AlignedReads():
                 mapped_reads = int(line.split('+')[0].strip())
         return mapped_reads
 
-
-
+    
     def samtools_flagstat(self):
         logging.info('samtools flagstat...')
         results = pysam.flagstat(self.bam_file, split_lines=True)
@@ -147,8 +141,7 @@ class AlignedReads():
             flagstat += (line.strip('\n') + '\n')
         return flagstat
 
-
-
+    
     def chr_m_stats(self):
         logging.info('Getting mitochondrial chromosome fraction...')
         chrom_list = pysam.idxstats(self.bam_file, split_lines=True)
@@ -161,7 +154,6 @@ class AlignedReads():
         fract_chr_m = float(chr_m_reads) / tot_reads
 
         return (chr_m_reads, fract_chr_m)
-
 
 
     def mapq_stats(self, q=30):
@@ -178,26 +170,26 @@ class AlignedReads():
         return (num_qreads, fract_good_mapq)
 
 
-
     def gc_content(self):
         logging.info('Getting GC bias...')
         output_file = '{0}_gc.txt'.format(self.outprefix)
         plot_file = '{0}_gcPlot.pdf'.format(self.outprefix)
         summary_file = '{0}_gcSummary.txt'.format(self.outprefix)
-        get_gc_metrics = ('java -Xmx4G -jar '
-                          '{5}/picard.jar '
-                          'CollectGcBiasMetrics R={0} I={1} O={2} '
-                          'ASSUME_SORTED=FALSE '
-                          'CHART={3} S={4}').format(self.species_files['ref'],
-                                                    self.bam_file, 
-                                                    output_file,
-                                                    plot_file,
-                                                    summary_file,
-                                                    os.environ['PICARDROOT'])
+        get_gc_metrics = (
+            'java -Xmx4G -jar '
+            '{5}/picard.jar '
+            'CollectGcBiasMetrics R={0} I={1} O={2} '
+            'ASSUME_SORTED=FALSE '
+            'CHART={3} S={4}').format(
+                self.species_files['ref'],
+                self.bam_file, 
+                output_file,
+                plot_file,
+                summary_file,
+                os.environ['PICARDROOT'])
         logging.info(get_gc_metrics)
         os.system(get_gc_metrics)
         return output_file, plot_file, summary_file
-
 
 
     def picard_complexity(self):
@@ -224,7 +216,6 @@ class AlignedReads():
         return est_library_size
 
 
-
     def preseq_complexity(self):
         sort_bam = 'samtools sort -o {1}.sorted.bam -T {1} -@ 2 {0}'.format(
             self.bam_file, self.outprefix)
@@ -233,16 +224,17 @@ class AlignedReads():
         logging.info('Running preseq...')
         preseq_data = '{0}.preseq.dat'.format(self.outprefix)
         preseq_log = '{0}.preseq.log'.format(self.outprefix)
-        preseq = ('preseq lc_extrap '
-                  '-P -B -o {0} {1}.sorted.bam -v 2> {2}').format(preseq_data,
-                                                                  self.outprefix,
-                                                                  preseq_log)
+        preseq = (
+            'preseq lc_extrap '
+            '-P -B -o {0} {1}.sorted.bam -v 2> {2}').format(
+                preseq_data,
+                self.outprefix,
+                preseq_log)
         logging.info(preseq)
         os.system(preseq)
         os.system('rm {0}.sorted.bam'.format(self.outprefix))
 
         return preseq_data, preseq_log
-
 
 
     def encode_complexity(self):
@@ -261,7 +253,6 @@ class AlignedReads():
             pass
                 
         return {'NRF':NRF, 'PBC1':PBC1, 'PBC2':PBC2}
-
 
 
     def picard_dup_stats(self):
@@ -297,7 +288,6 @@ class AlignedReads():
         return None
 
 
-
     def get_sambamba_dup_stats(sambamba_dup_file, paired_status):# sambaba-markdups takes a bam file
         logging.info('Running sambamba markdup...')
         
@@ -317,7 +307,6 @@ class AlignedReads():
             return ends_marked_dup, prct_dup
 
 
-
     def mito_dups(self, use_sambamba=False):
         
         out_file = '{0}.dupmark.ataqc.bam'.format(self.outprefix)
@@ -327,49 +316,58 @@ class AlignedReads():
         tmp_filtered_bam = '{0}.filt.bam'.format(self.outprefix)
         tmp_filtered_bam_prefix = tmp_filtered_bam.replace('.bam', '')
         if self.is_paired() == 'Paired-ended':
-            filter_bam = ('samtools view -F 1804 -f 2 -u {0} | '
-                          'samtools sort -o {1}.bam -T {1}'.format(self.bam_file, tmp_filtered_bam_prefix))
+            filter_bam = (
+                'samtools view -F 1804 -f 2 -u {0} | '
+                'samtools sort -o {1}.bam -T {1}'.format(
+                    self.bam_file, tmp_filtered_bam_prefix))
         else:
-            filter_bam = ('samtools view -F 1804 -u {0} | '
-                          'samtools sort -o {1}.bam -T {1}'.format(self.bam_file, tmp_filtered_bam_prefix))
+            filter_bam = (
+                'samtools view -F 1804 -u {0} | '
+                'samtools sort -o {1}.bam -T {1}'.format(
+                    self.bam_file, tmp_filtered_bam_prefix))
         os.system(filter_bam)
 
-        mark_duplicates = ('java -Xmx4G -jar '
-                           '{0}/picard.jar '
-                           'MarkDuplicates INPUT={1} OUTPUT={2} '
-                           'METRICS_FILE={3} '
-                           'SORTING_COLLECTION_SIZE_RATIO=0.25 ' 
-                           'VALIDATION_STRINGENCY=LENIENT '
-                           'ASSUME_SORTED=TRUE '
-                           'REMOVE_DUPLICATES=FALSE '
-                           'VERBOSITY=ERROR '
-                           'QUIET=TRUE').format(os.environ['PICARDROOT'],
-                                                tmp_filtered_bam,
-                                                out_file,
-                                                metrics_file)
+        mark_duplicates = (
+            'java -Xmx4G -jar '
+            '{0}/picard.jar '
+            'MarkDuplicates INPUT={1} OUTPUT={2} '
+            'METRICS_FILE={3} '
+            'SORTING_COLLECTION_SIZE_RATIO=0.25 ' 
+            'VALIDATION_STRINGENCY=LENIENT '
+            'ASSUME_SORTED=TRUE '
+            'REMOVE_DUPLICATES=FALSE '
+            'VERBOSITY=ERROR '
+            'QUIET=TRUE').format(
+                os.environ['PICARDROOT'],
+                tmp_filtered_bam,
+                out_file,
+                metrics_file)
         if use_sambamba:
-            mark_duplicates = ('sambamba markdup -t 8 '
-                               '--hash-table-size=17592186044416 '
-                               '--overflow-list-size=20000000 '
-                               '--io-buffer-size=256 '
-                               '{0} '
-                               '{1} '
-                               '2> {2}').format(tmp_filtered_bam,
-                                                out_file,
-                                                metrics_file)
+            mark_duplicates = (
+                'sambamba markdup -t 8 '
+                '--hash-table-size=17592186044416 '
+                '--overflow-list-size=20000000 '
+                '--io-buffer-size=256 '
+                '{0} '
+                '{1} '
+                '2> {2}').format(tmp_filtered_bam,
+                                 out_file,
+                                 metrics_file)
 
         os.system(mark_duplicates)
 
         index_file = 'samtools index {0}'.format(out_file)
         os.system(index_file)
     
-        mito_dups = int(subprocess.check_output(['samtools',
-                                                 'view', '-f', '1024',
-                                                 '-c', out_file, 'chrM']).strip())
+        mito_dups = int(subprocess.check_output(
+            ['samtools',
+             'view', '-f', '1024',
+             '-c', out_file, 'chrM']).strip())
         
-        total_dups = int(subprocess.check_output(['samtools',
-                                                  'view', '-f', '1024',
-                                                  '-c', out_file]).strip())
+        total_dups = int(subprocess.check_output(
+            ['samtools',
+             'view', '-f', '1024',
+             '-c', out_file]).strip())
         
         remove_bam = 'rm {0}'.format(out_file)
         os.system(remove_bam)
@@ -379,7 +377,6 @@ class AlignedReads():
         os.system(remove_tmp_filtered_bam)
         
         return (mito_dups, float(mito_dups) / total_dups)
-
 
 
     def tss_enrichment(self, bins=400, bp_edge=2000, processes=8, greenleaf_norm=True):
@@ -471,7 +468,6 @@ class AlignedReads():
         return tss_plot_file, tss_plot_large_file, tss_point_val
 
 
-
     def fragment_length_distribution(self):
         logging.info('insert size distribution...')
         insert_data = '{0}.inserts.hist_data.log'.format(self.outprefix)
@@ -496,7 +492,6 @@ class AlignedReads():
                         break
                 data = np.loadtxt(fp, skiprows=1)# Load data_file into variable regardless of whether or not it has the ## HISTOGRAM text?
             return data
-
 
 
         def fragment_length_qc(data):
@@ -545,17 +540,6 @@ class AlignedReads():
         plot_b64 = fragment_length_plot(insert_data)
 
         return percent_nfr, percent_nfr_vs_mono_nuc, peaks, plot_b64
-
-
-
-    # TODO Is this in the Integrative module?
-    def annotation_enrichments():
-        return None
-
-
-    # TODO What is being compared?
-    def compare_samples():
-        return None
 
 
     def run_metrics(self, encode=False):
@@ -636,5 +620,3 @@ class AlignedReads():
             
         return metrics
 
-def test_reads_import():
-    print True

@@ -1,0 +1,3 @@
+To run tests - at the top level of ataqc, run:
+
+python -m unittest discover -v

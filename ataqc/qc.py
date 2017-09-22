@@ -502,7 +502,7 @@ class AnnotationQualStats(QCGroup):
         annot_enrich_table = OrderedDict()
         for annotation_key in self.metrics["integrative"]["annotation_enrichments"].keys():
             annot_enrich_table["Fraction of reads in {}".format(annotation_key)] = QCNoCheck(
-                "Fraction of reads in universal DHS regions")(self.metrics['integrative']['annotation_enrichments'][annotation_key])
+                "Fraction of reads in {}".format(annotation_key))(self.metrics['integrative']['annotation_enrichments'][annotation_key])
 
         self.qc['annot_enrich_plot'] = {'qc': annot_enrich_plot,
                                         'type': 'plot',

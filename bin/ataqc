@@ -185,10 +185,10 @@ def main():
                 "{}/{}".format(args.out_dir, args.prefix),
                 sample["name"],
                 args.encode)
-            viz.write_html(qc_groups,
+            write_html(qc_groups,
                            "{}/{}".format(args.out_dir, args.prefix),
                            sample["name"])
-            viz.write_text(qc_groups,
+            write_text(qc_groups,
                            "{}/{}".format(args.out_dir, args.prefix),
                            sample["name"])
             
