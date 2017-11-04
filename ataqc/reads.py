@@ -18,6 +18,10 @@ import pysam
 import pybedtools
 import metaseq
 
+# added to deal with library issues
+import matplotlib
+matplotlib.use("Agg")
+
 from matplotlib import pyplot as plt
 from matplotlib import mlab
 from base64 import b64encode

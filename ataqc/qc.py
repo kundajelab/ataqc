@@ -11,6 +11,10 @@ import pandas as pd
 from collections import namedtuple
 from collections import OrderedDict
 
+# added to deal with backend library issues
+import matplotlib
+matplotlib.use("Agg")
+
 from matplotlib import pyplot as plt
 from io import BytesIO
 from base64 import b64encode

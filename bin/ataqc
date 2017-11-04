@@ -11,6 +11,11 @@ import logging
 import time
 import pkg_resources
 
+# added to deal with library backend issues
+import matplotlib
+matplotlib.use("Agg")
+
+
 from collections import OrderedDict
 
 from ataqc.util.io import sample_sheet_to_dict
