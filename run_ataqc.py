@@ -968,7 +968,7 @@ def compare_to_roadmap(bw_file, regions_file, reg2map_file,
 
     merged = pd.merge(metadata, results, on='eid')
 
-    sorted_results = merged.sort('corr', ascending=True)
+    sorted_results = merged.sort_values('corr', ascending=True)
 
     # Plot results
     pos = np.array(range(ncol)) + 0.5
