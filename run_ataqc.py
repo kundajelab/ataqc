@@ -708,7 +708,7 @@ def get_fract_reads_in_regions(reads_bed, regions_bed):
     # uses new run_shell_cmd
     cmd = "bedtools sort -i {}  | "
     cmd += "bedtools merge -i stdin | "
-    cmd += "bedtools intersect -sorted -u -nonamecheck -a {} -b stdin | "
+    cmd += "bedtools intersect -u -nonamecheck -a {} -b stdin | "
     cmd += "wc -l"
     #cmd += "bedtools intersect -c -nonamecheck -a stdin -b {} | "
     #cmd += "awk '{{ sum+=$4 }} END {{ print sum }}'"
